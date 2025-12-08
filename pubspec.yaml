@@ -49,6 +49,7 @@ dependencies:
   fl_chart: ^1.0.0
   file_picker: ^10.3.2
   syncfusion_flutter_pdfviewer: ^30.2.7
+  connectivity_plus: ^6.0.0
 
 dev_dependencies:
   flutter_test:

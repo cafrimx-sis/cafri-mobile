@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:cafri/administrador/upload_view_download_pdf_screen.dart';
+import 'package:cafri/colaborador/pdf.dart';
 import 'package:flutter/material.dart';
 import 'package:cafri/autentificacion/auth_service.dart';
 import 'package:cafri/autentificacion/login_screen.dart';
@@ -155,6 +156,11 @@ class _AdminScreenState extends State<AdminScreen> {
           'ver y descargar PDF',
           Icons.picture_as_pdf,
           PdfListScreen(),
+        ),
+        _MenuOption(
+          'generar y subir PDF',
+          Icons.picture_as_pdf,
+          FormularioPDF(),
         ),
       ]),
     ];

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Modelo para los productos/servicios de la cotización
 class CotizacionItem {
@@ -83,6 +84,8 @@ class CotizacionScreen extends StatefulWidget {
 }
 
 class _CotizacionScreenState extends State<CotizacionScreen> {
+  // clave de borrador en storage
+  static const String _draftKey = 'cotizacion_draft_v1';
   // ---- DATOS FIJOS DE LA EMPRESA ----
   final String direccionEmpresa =
       "C. 59k N°518 X 112 Y 114 Col. Bojorquez Cp. 97230";
@@ -115,6 +118,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
   void initState() {
     super.initState();
     _resetForm();
+    _restoreDraft();
   }
 
   void _resetForm() {
@@ -131,6 +135,179 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
       items = [];
       _clienteBusquedaController.clear();
     });
+  }
+
+  // ====== Persistencia local simple del borrador ======
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = <String, dynamic>{
+        'fecha': fecha,
+        'validoHasta': _validoHastaController.text,
+        'cliente': cliente == null
+            ? null
+            : {
+                'id': cliente!.id,
+                'codigo': cliente!.codigo,
+                'nombre': cliente!.nombre,
+                'email': cliente!.email,
+                'direccion': cliente!.direccion,
+                'ciudad': cliente!.ciudad,
+                'telefono': cliente!.telefono,
+              },
+        'items': items
+            .map(
+              (e) => {
+                'codigo': e.codigo,
+                'descripcion': e.descripcion,
+                'cantidad': e.cantidad,
+                'precio': e.precio,
+                'impuesto': e.impuesto,
+              },
+            )
+            .toList(),
+      };
+      // encode manual minimalista para evitar dependencias extra
+      final json = StringBuffer('{');
+      json.write('"fecha":"$fecha"');
+      json.write(',"validoHasta":"${_validoHastaController.text}"');
+      if (data['cliente'] != null) {
+        final c = data['cliente'] as Map<String, dynamic>;
+        json.write(',"cliente":{');
+        json.write('"id":"${c['id']}"');
+        json.write(',"codigo":"${c['codigo']}"');
+        json.write(',"nombre":"${c['nombre']}"');
+        json.write(',"email":"${c['email']}"');
+        json.write(',"direccion":"${c['direccion']}"');
+        json.write(',"ciudad":"${c['ciudad']}"');
+        json.write(',"telefono":"${c['telefono']}"');
+        json.write('}');
+      }
+      // items
+      json.write(',"items":[');
+      for (int i = 0; i < items.length; i++) {
+        final it = items[i];
+        json.write('{');
+        json.write('"codigo":"${it.codigo}"');
+        json.write(',"descripcion":"${it.descripcion.replaceAll('"', '\\"')}"');
+        json.write(',"cantidad":${it.cantidad}');
+        json.write(',"precio":${it.precio}');
+        json.write(',"impuesto":${it.impuesto}');
+        json.write('}');
+        if (i < items.length - 1) json.write(',');
+      }
+      json.write(']');
+      json.write('}');
+      await prefs.setString(_draftKey, json.toString());
+    } catch (_) {
+      // ignora errores de persistencia
+    }
+  }
+
+  Future<void> _restoreDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.isEmpty) return;
+      // parseo muy básico
+      // Para robustez podríamos usar dart:convert, pero evitamos dependencias adicionales.
+      // Aquí, extraemos mediante expresiones regulares simples.
+      String? extractString(String key) {
+        final reg = RegExp('"$key":"(.*?)"');
+        final m = reg.firstMatch(raw);
+        return m?.group(1);
+      }
+
+      setState(() {
+        fecha = extractString('fecha') ?? fecha;
+        final valido = extractString('validoHasta');
+        if (valido != null) {
+          _validoHastaController.text = valido;
+          try {
+            _validoHastaDate = DateTime.parse(valido);
+          } catch (_) {}
+        }
+      });
+
+      // cliente
+      if (raw.contains('"cliente":{')) {
+        String sub = raw.split('"cliente":{').last;
+        sub = sub.split('}')[0];
+        String? cs(String k) {
+          final reg = RegExp('"$k":"(.*?)"');
+          final m = reg.firstMatch(sub);
+          return m?.group(1);
+        }
+
+        final c = Cliente(
+          id: cs('id') ?? '',
+          codigo: cs('codigo') ?? '',
+          nombre: cs('nombre') ?? '',
+          email: cs('email') ?? '',
+          direccion: cs('direccion') ?? '',
+          ciudad: cs('ciudad') ?? '',
+          telefono: cs('telefono') ?? '',
+        );
+        setState(() {
+          cliente = c.id.isEmpty && c.nombre.isEmpty ? null : c;
+          if (cliente != null) {
+            _clienteBusquedaController.text =
+                '${cliente!.nombre} (${cliente!.codigo})';
+          }
+        });
+      }
+
+      // items
+      if (raw.contains('"items":[')) {
+        String listPart = raw.split('"items":[').last;
+        listPart = listPart.split(']')[0];
+        final parts = listPart.isEmpty ? <String>[] : listPart.split('},{');
+        final restored = <CotizacionItem>[];
+        for (var p in parts) {
+          String seg = p;
+          if (!seg.startsWith('{')) seg = '{$seg';
+          if (!seg.endsWith('}')) seg = '$seg}';
+          String? ss(String k) {
+            final r = RegExp('"$k":"(.*?)"');
+            final m = r.firstMatch(seg);
+            return m?.group(1);
+          }
+
+          String? sn(String k) {
+            final r = RegExp('"$k":(-?[0-9.]+)');
+            final m = r.firstMatch(seg);
+            return m?.group(1);
+          }
+
+          final codigo = ss('codigo') ?? '';
+          final descripcion = (ss('descripcion') ?? '').replaceAll('\\"', '"');
+          final cantidad = int.tryParse(sn('cantidad') ?? '') ?? 1;
+          final precio = double.tryParse(sn('precio') ?? '') ?? 0.0;
+          final impuesto = double.tryParse(sn('impuesto') ?? '') ?? 0.16;
+          restored.add(
+            CotizacionItem(
+              codigo: codigo,
+              descripcion: descripcion,
+              cantidad: cantidad,
+              precio: precio,
+              impuesto: impuesto,
+            ),
+          );
+        }
+        setState(() {
+          items = restored;
+        });
+      }
+    } catch (_) {
+      // ignorar errores de restauración
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
   }
 
   /// Busca clientes por nombre o código que EMPIECEN con el patrón, hasta 10 resultados, evitando duplicados
@@ -424,6 +601,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                           items.add(nuevoItem);
                         }
                       });
+                      _saveDraft();
                       Navigator.pop(context);
                     },
                     child: Text(editarItem == null ? 'Agregar' : 'Guardar'),
@@ -460,6 +638,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
       setState(() {
         items.removeAt(index);
       });
+      _saveDraft();
     }
   }
 
@@ -826,6 +1005,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                                 'yyyy-MM-dd',
                               ).format(picked);
                             });
+                            _saveDraft();
                           }
                         },
                       ),
@@ -879,6 +1059,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                   _clienteBusquedaController.text = '${c.nombre} (${c.codigo})';
                   _clienteError = null;
                 });
+                _saveDraft();
               },
               fieldViewBuilder:
                   (context, controller, focusNode, onFieldSubmitted) {
@@ -1088,7 +1269,10 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
             const SizedBox(height: 24),
             Center(
               child: ElevatedButton.icon(
-                onPressed: _exportarAPDF,
+                onPressed: () async {
+                  await _exportarAPDF();
+                  await _clearDraft();
+                },
                 icon: const Icon(Icons.picture_as_pdf),
                 label: const Text("Exportar a PDF y guardar"),
               ),

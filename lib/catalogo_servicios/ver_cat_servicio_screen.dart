@@ -1,10 +1,9 @@
-//
-// ignore_for_file: use_build_context_synchronously
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cafri/catalogo_servicios/agregar_cat_servicio_screen.dart';
 import 'package:cafri/catalogo_servicios/actualizar_cat_servicio_screen.dart';
+
+// ignore_for_file: use_build_context_synchronously
 
 class ListarServiciosScreen extends StatefulWidget {
   const ListarServiciosScreen({super.key});
@@ -14,7 +13,14 @@ class ListarServiciosScreen extends StatefulWidget {
 }
 
 class _ListarServiciosScreenState extends State<ListarServiciosScreen> {
+  final TextEditingController _searchController = TextEditingController();
   String _search = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _borrarServicio(
     BuildContext context,
@@ -60,271 +66,294 @@ class _ListarServiciosScreenState extends State<ListarServiciosScreen> {
     }
   }
 
+  PopupMenuButton<String> _accionesPopup({
+    required String servicioId,
+    required String concepto,
+    required Map<String, dynamic> data,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: 'Acciones',
+      onSelected: (value) async {
+        switch (value) {
+          case 'edit':
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ServicioEditarScreen(
+                  servicioId: servicioId,
+                  servicioData: data,
+                ),
+              ),
+            );
+            // El StreamBuilder se refresca solo
+            break;
+          case 'delete':
+            await _borrarServicio(context, servicioId, concepto);
+            break;
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'edit',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.edit, color: Colors.blue),
+            title: Text('Editar'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete, color: Colors.red),
+            title: Text('Eliminar'),
+          ),
+        ),
+      ],
+      icon: const Icon(Icons.more_vert),
+    );
+  }
+
+  Color _cardTint(BuildContext context) {
+    return Theme.of(
+      context,
+    ).colorScheme.primaryContainer.withValues(alpha: 0.2);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bool isMobile = MediaQuery.of(context).size.width < 700;
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 700;
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface.withAlpha(
-        (0.07 * 255).toInt(),
-      ),
-      appBar: AppBar(
-        title: const Text('Catálogo de Servicios'),
-        centerTitle: true,
-        elevation: 2,
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                child: TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Buscar por código, concepto o precio',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _search = value.trim().toLowerCase();
-                    });
-                  },
-                ),
-              ),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('servicios')
-                      .orderBy('createdAt', descending: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Center(
-                        child: Text('No hay servicios registrados.'),
-                      );
-                    }
-                    final servicios = snapshot.data!.docs.where((servicio) {
-                      final codigo = (servicio['codigo'] ?? '')
-                          .toString()
-                          .toLowerCase();
-                      final concepto = (servicio['concepto'] ?? '')
-                          .toString()
-                          .toLowerCase();
-                      final precio = (servicio['precioMenudeo'] ?? '')
-                          .toString()
-                          .toLowerCase();
-                      final id = servicio.id.toLowerCase();
-                      if (_search.isEmpty) return true;
-                      return codigo.contains(_search) ||
-                          concepto.contains(_search) ||
-                          precio.contains(_search) ||
-                          id.contains(_search);
-                    }).toList();
-
-                    if (servicios.isEmpty) {
-                      return const Center(
-                        child: Text('No hay resultados para la búsqueda.'),
-                      );
-                    }
-
-                    if (isMobile) {
-                      // ---------- TARJETAS PARA MOVIL -------------
-                      return ListView.separated(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: servicios.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, idx) {
-                          final servicio = servicios[idx];
-                          final codigo = servicio['codigo'] ?? '';
-                          final concepto = servicio['concepto'] ?? '';
-                          final precio = servicio['precioMenudeo'] ?? 0.0;
-                          final id = servicio.id;
-
-                          return Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(13),
+      appBar: AppBar(title: const Text('Catálogo de Servicios')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              children: [
+                // Búsqueda
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            labelText: 'Buscar por código, concepto o precio',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _search.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Limpiar',
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _search = '');
+                                    },
+                                  ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 15,
-                                vertical: 13,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.miscellaneous_services,
-                                        color: theme.primaryColor,
-                                        size: 26,
-                                      ),
-                                      const SizedBox(width: 7),
-                                      Expanded(
-                                        child: Text(
-                                          "$codigo - $concepto",
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    "Precio: \$${precio.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.edit,
-                                          color: Colors.blue,
-                                        ),
-                                        tooltip: 'Editar servicio',
-                                        onPressed: () async {
-                                          await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  ServicioEditarScreen(
-                                                    servicioId: id,
-                                                    servicioData:
-                                                        servicio.data()
-                                                            as Map<
-                                                              String,
-                                                              dynamic
-                                                            >,
-                                                  ),
-                                            ),
-                                          );
-                                          // No se llama a setState aquí
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: Colors.red,
-                                        ),
-                                        tooltip: 'Eliminar servicio',
-                                        onPressed: () => _borrarServicio(
-                                          context,
-                                          id,
-                                          concepto,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    } else {
-                      // ---- TABLA PARA ESCRITORIO/WEB ---------
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columnSpacing: 24,
-                            headingRowColor: WidgetStateProperty.all(
-                              theme.colorScheme.primary.withAlpha(20),
-                            ),
-                            columns: const [
-                              DataColumn(label: Text('Código')),
-                              DataColumn(label: Text('Concepto')),
-                              DataColumn(label: Text('Precio')),
-                              DataColumn(label: Text('Acciones')),
-                            ],
-                            rows: servicios.map((servicio) {
-                              final codigo = servicio['codigo'] ?? '';
-                              final concepto = servicio['concepto'] ?? '';
-                              final precio = servicio['precioMenudeo'] ?? 0.0;
-                              final id = servicio.id;
-
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(codigo)),
-                                  DataCell(Text(concepto)),
-                                  DataCell(
-                                    Text('\$${precio.toStringAsFixed(2)}'),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.edit,
-                                            color: Colors.blue,
-                                          ),
-                                          tooltip: 'Editar servicio',
-                                          onPressed: () async {
-                                            await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) =>
-                                                    ServicioEditarScreen(
-                                                      servicioId: id,
-                                                      servicioData:
-                                                          servicio.data()
-                                                              as Map<
-                                                                String,
-                                                                dynamic
-                                                              >,
-                                                    ),
-                                              ),
-                                            );
-                                            // No se llama a setState aquí
-                                          },
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                          ),
-                                          tooltip: 'Eliminar servicio',
-                                          onPressed: () => _borrarServicio(
-                                            context,
-                                            id,
-                                            concepto,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                          ),
+                          onChanged: (value) => setState(
+                            () => _search = value.trim().toLowerCase(),
                           ),
                         ),
-                      );
-                    }
-                  },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('servicios')
+                        .orderBy('createdAt', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Error al cargar servicios: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        );
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return _EmptyState(
+                          onCreate: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ServicioCreateScreen(),
+                              ),
+                            );
+                          },
+                        );
+                      }
+
+                      final allDocs = snapshot.data!.docs;
+                      final servicios = allDocs.where((servicio) {
+                        final data = servicio.data() as Map<String, dynamic>;
+                        final codigo = (data['codigo'] ?? '')
+                            .toString()
+                            .toLowerCase();
+                        final concepto = (data['concepto'] ?? '')
+                            .toString()
+                            .toLowerCase();
+                        final precio = (data['precioMenudeo'] ?? '')
+                            .toString()
+                            .toLowerCase();
+                        final id = servicio.id.toLowerCase();
+                        if (_search.isEmpty) return true;
+                        return codigo.contains(_search) ||
+                            concepto.contains(_search) ||
+                            precio.contains(_search) ||
+                            id.contains(_search);
+                      }).toList();
+
+                      final total = allDocs.length;
+                      final count = servicios.length;
+
+                      if (servicios.isEmpty) {
+                        return Column(
+                          children: [
+                            _HeaderResultados(count: 0, total: total),
+                            const SizedBox(height: 12),
+                            const _NoResults(),
+                          ],
+                        );
+                      }
+
+                      final header = _HeaderResultados(
+                        count: count,
+                        total: total,
+                      );
+
+                      if (isMobile) {
+                        // ---------- Tarjetas para móvil ----------
+                        return Column(
+                          children: [
+                            header,
+                            Expanded(
+                              child: ListView.separated(
+                                padding: const EdgeInsets.all(8),
+                                itemCount: servicios.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, idx) {
+                                  final doc = servicios[idx];
+                                  final data =
+                                      doc.data() as Map<String, dynamic>;
+                                  final codigo = (data['codigo'] ?? '')
+                                      .toString();
+                                  final concepto = (data['concepto'] ?? '')
+                                      .toString();
+                                  final precio =
+                                      (data['precioMenudeo'] as num?)
+                                          ?.toDouble() ??
+                                      0.0;
+
+                                  return _ServicioCard(
+                                    tint: _cardTint(context),
+                                    codigo: codigo,
+                                    concepto: concepto,
+                                    precio: precio,
+                                    acciones: _accionesPopup(
+                                      servicioId: doc.id,
+                                      concepto: concepto,
+                                      data: data,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      } else {
+                        // ---------- Tabla para escritorio/web ----------
+                        return Column(
+                          children: [
+                            header,
+                            Expanded(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.vertical,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: DataTable(
+                                    columnSpacing: 24,
+                                    headingRowColor:
+                                        WidgetStatePropertyAll<Color?>(
+                                          theme.colorScheme.primary.withValues(
+                                            alpha: 30 / 255,
+                                          ),
+                                        ),
+                                    columns: const [
+                                      DataColumn(label: Text('Código')),
+                                      DataColumn(label: Text('Concepto')),
+                                      DataColumn(label: Text('Precio')),
+                                      DataColumn(label: Text('Acciones')),
+                                    ],
+                                    rows: servicios.map((doc) {
+                                      final data =
+                                          doc.data() as Map<String, dynamic>;
+                                      final codigo = (data['codigo'] ?? '')
+                                          .toString();
+                                      final concepto = (data['concepto'] ?? '')
+                                          .toString();
+                                      final precio =
+                                          (data['precioMenudeo'] as num?)
+                                              ?.toDouble() ??
+                                          0.0;
+
+                                      return DataRow(
+                                        cells: [
+                                          DataCell(Text(codigo)),
+                                          DataCell(
+                                            ConstrainedBox(
+                                              constraints: const BoxConstraints(
+                                                maxWidth: 480,
+                                              ),
+                                              child: Text(
+                                                concepto,
+                                                maxLines: 3,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                          DataCell(
+                                            Text(
+                                              '\$${precio.toStringAsFixed(2)}',
+                                            ),
+                                          ),
+                                          DataCell(
+                                            _accionesPopup(
+                                              servicioId: doc.id,
+                                              concepto: concepto,
+                                              data: data,
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -338,9 +367,192 @@ class _ListarServiciosScreenState extends State<ListarServiciosScreen> {
         tooltip: 'Agregar Servicio',
         icon: const Icon(Icons.add),
         label: const Text('Agregar Servicio'),
-        backgroundColor: theme.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 4,
+      ),
+    );
+  }
+}
+
+class _HeaderResultados extends StatelessWidget {
+  final int count;
+  final int total;
+  const _HeaderResultados({required this.count, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Mostrando $count de $total resultados',
+          style: TextStyle(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ServicioCard extends StatelessWidget {
+  final String codigo;
+  final String concepto;
+  final double precio;
+  final Color tint;
+  final Widget acciones;
+
+  const _ServicioCard({
+    required this.codigo,
+    required this.concepto,
+    required this.precio,
+    required this.tint,
+    required this.acciones,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: tint.withValues(alpha: 0.5), width: 1),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            colors: [Colors.white, tint],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.6, 1],
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: avatar + título + acciones
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: colorScheme.primary.withValues(alpha: 0.15),
+                  foregroundColor: colorScheme.primary,
+                  child: Text(
+                    (codigo.isNotEmpty ? codigo[0] : '?').toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$codigo - $concepto',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: Text(
+                          'Precio: \$${precio.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                acciones,
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onCreate;
+  const _EmptyState({required this.onCreate});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.miscellaneous_services_outlined,
+              size: 64,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No hay servicios registrados.',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Comienza agregando tu primer servicio.',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar Servicio'),
+              onPressed: onCreate,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoResults extends StatelessWidget {
+  const _NoResults();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.search_off, size: 64, color: Colors.grey),
+            SizedBox(height: 12),
+            Text(
+              'No hay resultados para la búsqueda.',
+              style: TextStyle(fontSize: 16),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -193,9 +193,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
     if (campoNombreCliente.text.trim().isEmpty) {
       return 'Nombre del cliente es obligatorio.';
     }
-    if (atencion.text.trim().isEmpty) {
-      return 'El campo "atencion" es obligatorio.';
-    }
 
     // Por cada hoja
     for (int i = 0; i < hojas.length; i++) {
@@ -205,21 +202,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
       if (hoja.actividadResponsableController.text.trim().isEmpty) {
         return 'Hoja $noHoja: El campo "Responsable" es obligatorio.';
       }
-      if (hoja.actividadTipoTareaController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: El campo "Tipo de tarea" es obligatorio.';
-      }
-      if (hoja.descripcionTareaController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: La descripción de la tarea es obligatoria.';
-      }
-      if (hoja.modeloEvaporadorController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: El modelo del evaporador es obligatorio.';
-      }
-      if (hoja.serieEvaporadorController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: La serie del evaporador es obligatoria.';
-      }
-      if (hoja.capacidadEvaporadorController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: La capacidad del evaporador es obligatoria.';
-      }
 
       if (hoja.imagenesEvaporadores.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 imagen de evaporador/condensador.';
@@ -228,27 +210,15 @@ class _FormularioPDFState extends State<FormularioPDF> {
       if (hoja.fotosMantenimientoInicio.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 foto de inicio.';
       }
-      if (hoja.descripcionInicioController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: Escribe descripción de fotos de inicio.';
-      }
       if (hoja.fotosMantenimientoProceso.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 foto de proceso.';
-      }
-      if (hoja.descripcionProcesoController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: Escribe descripción de fotos de proceso.';
       }
       if (hoja.fotosMantenimientoFin.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 foto de fin.';
       }
-      if (hoja.descripcionFinController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: Escribe descripción de fotos de fin.';
-      }
 
       if (hoja.descripcionTrabajoRealizadoController.text.trim().isEmpty) {
         return 'Hoja $noHoja: Describe el trabajo realizado.';
-      }
-      if (hoja.materialUtilizadoController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: Agrega el material utilizado.';
       }
       if (hoja.observacionesController.text.trim().isEmpty) {
         return 'Hoja $noHoja: Llena las observaciones.';
@@ -272,7 +242,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
   }
 
   Future<void> _cargarFolio() async {
-    final folio = await FolioService.getNextFolio();
+    final folio = await FolioService.getAndUpdateFolio();
     setState(() {
       folioActual = folio;
       cargandoFolio = false;
@@ -325,19 +295,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
                   TextField(
                     controller: hoja.actividadResponsableController,
                     decoration: const InputDecoration(labelText: 'Responsable'),
-                  ),
-                  TextField(
-                    controller: hoja.actividadTipoTareaController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de tarea',
-                    ),
-                  ),
-                  TextField(
-                    controller: hoja.descripcionTareaController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripción de la tarea',
-                    ),
-                    maxLines: 2,
                   ),
                   // Modelo, serie, capacidad
                   Row(
@@ -500,7 +457,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Imágenes de evaporadores/condensadores',
+          'Imágenes de los evaporadores/condensadores',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -619,65 +576,77 @@ class _FormularioPDFState extends State<FormularioPDF> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(titulo),
-              content: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nombreController,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
+            return Dialog(
+              insetAnimationDuration: const Duration(milliseconds: 200),
+              insetAnimationCurve: Curves.easeOut,
+              child: SingleChildScrollView(
+                child: AlertDialog(
+                  title: Text(titulo),
+                  content: SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: nombreController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          constraints: BoxConstraints(
+                            maxHeight: screenHeight * 0.3,
+                            minHeight: 150,
+                          ),
+                          child: Signature(
+                            controller: controller,
+                            backgroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: Signature(
-                        controller: controller,
-                        backgroundColor: Colors.white,
-                      ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        controller.clear();
+                        setDialogState(() {}); // refresca el diálogo
+                      },
+                      child: const Text('Limpiar'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        if (controller.isNotEmpty &&
+                            nombreController.text.trim().isNotEmpty) {
+                          final signature = await controller.toPngBytes();
+                          Navigator.of(context).pop({
+                            'firma': signature,
+                            'nombre': nombreController.text.trim(),
+                          });
+                        } else {
+                          // Mostrar mensaje si falta firma o nombre
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'La firma y el nombre son obligatorios.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text('Guardar'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancelar'),
                     ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    controller.clear();
-                    setDialogState(() {}); // refresca el diálogo
-                  },
-                  child: const Text('Limpiar'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    if (controller.isNotEmpty &&
-                        nombreController.text.trim().isNotEmpty) {
-                      final signature = await controller.toPngBytes();
-                      Navigator.of(context).pop({
-                        'firma': signature,
-                        'nombre': nombreController.text.trim(),
-                      });
-                    } else {
-                      // Mostrar mensaje si falta firma o nombre
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'La firma y el nombre son obligatorios.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Guardar'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
-                ),
-              ],
             );
           },
         );
@@ -843,10 +812,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
                   labelText: 'Nombre del cliente',
                 ),
               ),
-              TextField(
-                controller: atencion,
-                decoration: const InputDecoration(labelText: 'atencion'),
-              ),
               const SizedBox(height: 16),
               _seccionConTitulo('Hojas de servicio', _hojasWidget()),
               const SizedBox(height: 32),
@@ -904,16 +869,37 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     logoBytes: logoUint8List,
                   );
 
-                  await subirPdfTarea(pdfBytes, folioParaPDF);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'PDF enviado al área administrativa exitosamente',
+                  try {
+                    await subirPdfTarea(
+                      pdfBytes,
+                      folioParaPDF,
+                      nombreCliente: campoNombreCliente.text,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'PDF enviado al área administrativa exitosamente',
+                        ),
+                        backgroundColor: Colors.green,
                       ),
-                    ),
-                  );
+                    );
+                  } catch (e) {
+                    // Si hay error de conexión, el PDF se guarda en la cola
+                    String mensaje = e.toString();
+                    if (mensaje.contains('Sin conexión')) {
+                      mensaje =
+                          'Sin conexión: PDF guardado en la cola. Puedes enviarlo después.';
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(mensaje),
+                        backgroundColor: Colors.orange,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
 
-                  await FolioService.updateFolio(folioParaPDF);
+                  // Folio already incremented atomically at load
                   setState(() {
                     folioActual = folioParaPDF + 1;
                     _limpiarFormulario();
@@ -1231,7 +1217,7 @@ class PdfGenerator {
             pw.SizedBox(height: 8),
 
             pw.Text(
-              'Imágenes de evaporadores/condensadores',
+              'Imágenes de los evaporadores/condensadores',
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
             buildImagenesEvaporadores(hoja['imagenesEvaporadores'] ?? []),
