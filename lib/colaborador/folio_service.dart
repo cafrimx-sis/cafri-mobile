@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:logger/logger.dart';
+import 'dart:math';
 
 class FolioService {
   static final Logger _logger = Logger();
@@ -37,11 +38,19 @@ class FolioService {
   /// Actualiza el folio en Firestore después de generar un PDF (NO seguro para concurrencia).
   static Future<void> updateFolio(int nuevoFolio) async {
     try {
-      await FirebaseFirestore.instance
+      // Usar transacción para evitar sobrescribir con un valor menor.
+      final docRef = FirebaseFirestore.instance
           .collection(_collection)
-          .doc(_document)
-          .set({_field: nuevoFolio}, SetOptions(merge: true));
-      _logger.i('[FolioService] updateFolio: Folio actualizado a $nuevoFolio');
+          .doc(_document);
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(docRef);
+        final current = (snapshot.data()?[_field] as int?) ?? _defaultFolio;
+        final newValue = max(current, nuevoFolio);
+        transaction.set(docRef, {_field: newValue}, SetOptions(merge: true));
+      });
+      _logger.i(
+        '[FolioService] updateFolio: Folio actualizado a $nuevoFolio (secure)',
+      );
     } catch (e, stack) {
       _logger.e(
         '[FolioService] Error en updateFolio',
@@ -79,6 +88,47 @@ class FolioService {
       );
       // Devuelve el default en caso de error
       return _defaultFolio + 1;
+    }
+  }
+
+  /// Obtiene el último folio sin actualizarlo (para lectura segura)
+  static Future<int> getLastFolio() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection(_collection)
+          .doc(_document)
+          .get();
+
+      final ultimoFolio = doc.data()?[_field] as int?;
+      final folioActual = ultimoFolio ?? _defaultFolio;
+      _logger.i('[FolioService] getLastFolio: El último folio es $folioActual');
+      return folioActual;
+    } catch (e, stack) {
+      _logger.e(
+        '[FolioService] Error en getLastFolio',
+        error: e,
+        stackTrace: stack,
+      );
+      return _defaultFolio;
+    }
+  }
+
+  /// Verifica si un folio ya fue enviado (para evitar duplicados)
+  static Future<bool> folioYaFueProcesado(int folio) async {
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('pdfs')
+          .where('folio', isEqualTo: folio)
+          .limit(1)
+          .get();
+      return query.docs.isNotEmpty;
+    } catch (e, stack) {
+      _logger.e(
+        '[FolioService] Error en folioYaFueProcesado',
+        error: e,
+        stackTrace: stack,
+      );
+      return false;
     }
   }
 }

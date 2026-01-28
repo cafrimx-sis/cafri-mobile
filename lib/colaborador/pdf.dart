@@ -838,66 +838,114 @@ class _FormularioPDFState extends State<FormularioPDF> {
                   );
                   if (confirm != true) return;
 
-                  final logoBytes = await rootBundle.load(
-                    'lib/assets/cafrilogo.png',
-                  );
-                  final logoUint8List = logoBytes.buffer.asUint8List();
-
-                  final hojasList = hojas.map((h) => h.toMap()).toList();
-
-                  // --- CAMBIO CLAVE: Guarda el folio actual en una variable local ---
-                  final folioParaPDF = folioActual!;
-
-                  final pdfBytes = await PdfGenerator.generatePdf(
-                    folio: folioParaPDF,
-                    nombreCliente: campoNombreCliente.text,
-                    atencion: atencion.text,
-                    hojas: hojasList,
-                    fechaFormateada: fechaFormateada,
-                    logoBytes: logoUint8List,
+                  // Mostrar indicador de progreso
+                  if (!mounted) return;
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) => const Dialog(
+                      child: Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('Generando y enviando PDF...'),
+                          ],
+                        ),
+                      ),
+                    ),
                   );
 
                   try {
-                    await subirPdfTarea(
-                      pdfBytes,
-                      folioParaPDF,
+                    final logoBytes = await rootBundle.load(
+                      'lib/assets/cafrilogo.png',
+                    );
+                    final logoUint8List = logoBytes.buffer.asUint8List();
+
+                    final hojasList = hojas.map((h) => h.toMap()).toList();
+
+                    // --- CAMBIO CLAVE: Guarda el folio actual en una variable local ---
+                    final folioParaPDF = folioActual!;
+
+                    final pdfBytes = await PdfGenerator.generatePdf(
+                      folio: folioParaPDF,
                       nombreCliente: campoNombreCliente.text,
+                      atencion: atencion.text,
+                      hojas: hojasList,
+                      fechaFormateada: fechaFormateada,
+                      logoBytes: logoUint8List,
                     );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'PDF enviado al área administrativa exitosamente',
-                        ),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } catch (e) {
-                    // Si hay error de conexión, el PDF se guarda en la cola
-                    String mensaje = e.toString();
-                    if (mensaje.contains('Sin conexión')) {
-                      mensaje =
-                          'Sin conexión: PDF guardado en la cola. Puedes enviarlo después.';
+
+                    // Validar que el PDF se generó correctamente
+                    if (pdfBytes.isEmpty) {
+                      throw Exception('El PDF generado está vacío');
                     }
+
+                    try {
+                      await subirPdfTarea(
+                        pdfBytes,
+                        folioParaPDF,
+                        nombreCliente: campoNombreCliente.text,
+                      );
+                    } catch (e) {
+                      // Error al subir, pero puede estar en cola
+                      final errorMsg = e.toString();
+                      if (mounted) {
+                        Navigator.of(context).pop(); // Cerrar diálogo de progreso
+                      }
+                      
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(errorMsg),
+                          backgroundColor: Colors.orange,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                      return;
+                    }
+
+                    // Si llegamos aquí, la subida fue exitosa
+                    await FolioService.updateFolio(folioParaPDF);
+                    
+                    if (mounted) {
+                      Navigator.of(context).pop(); // Cerrar diálogo de progreso
+                    }
+
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(mensaje),
-                        backgroundColor: Colors.orange,
+                        content: Text('✓ PDF enviado exitosamente\nFolio: $folioParaPDF'),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+
+                    setState(() {
+                      folioActual = folioParaPDF + 1;
+                      _limpiarFormulario();
+                    });
+
+                    await Printing.layoutPdf(
+                      onLayout: (format) async => pdfBytes,
+                      name: 'Tarea($folioParaPDF).pdf',
+                    );
+                  } catch (e) {
+                    if (mounted) {
+                      Navigator.of(context).pop(); // Cerrar diálogo de progreso
+                    }
+                    
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${e.toString()}'),
+                        backgroundColor: Colors.red,
                         duration: const Duration(seconds: 4),
                       ),
                     );
                   }
-
-                  await FolioService.updateFolio(folioParaPDF);
-                  setState(() {
-                    folioActual = folioParaPDF + 1;
-                    _limpiarFormulario();
-                  });
-
-                  await Printing.layoutPdf(
-                    onLayout: (format) async => pdfBytes,
-                    name:
-                        'Tarea($folioParaPDF).pdf', // Usa el folio correcto aquí
-                  );
                 },
               ),
             ],

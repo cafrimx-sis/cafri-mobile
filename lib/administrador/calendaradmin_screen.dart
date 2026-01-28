@@ -330,7 +330,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
                       // NUEVO: Selector de Cliente (arriba de Tipo de trabajo)
                       DropdownButtonFormField<String>(
-                        value:
+                        initialValue:
                             (clientes.any((c) => c['id'] == _selectedClienteId))
                             ? _selectedClienteId
                             : null,
@@ -381,7 +381,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
                       // Tipo de trabajo
                       DropdownButtonFormField<String>(
-                        value: _selectedTipo,
+                        initialValue: _selectedTipo,
                         decoration: InputDecoration(
                           labelText: 'Tipo de trabajo',
                           border: OutlineInputBorder(
@@ -679,7 +679,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
                       // Colaborador
                       DropdownButtonFormField<String>(
-                        value: _selectedColaborador,
+                        initialValue: _selectedColaborador,
                         decoration: InputDecoration(
                           labelText: 'Colaborador',
                           border: OutlineInputBorder(

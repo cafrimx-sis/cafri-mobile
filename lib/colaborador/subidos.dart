@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cafri/helpers/pdf_queue_service.dart';
 import 'package:cafri/helpers/upload_pdf_storage.dart';
+import 'package:cafri/colaborador/folio_service.dart';
 
 class SubidosScreen extends StatefulWidget {
   const SubidosScreen({super.key});
@@ -49,8 +50,86 @@ class _SubidosScreenState extends State<SubidosScreen> {
         return;
       }
 
-      // Enviar PDF
-      await subirPdfTarea(item.pdfBytes, item.folio);
+      // Verificar si el folio local es menor que el folio actual en servidor
+      // (puede ocurrir si otro dispositivo generó folios mientras este estaba offline)
+      int folioAEnviar = item.folio;
+      final lastFolioEnServidor = await FolioService.getLastFolio();
+      if (item.folio < lastFolioEnServidor) {
+        // El folio local quedó atrás, asignar uno nuevo
+        folioAEnviar = await FolioService.getAndUpdateFolio();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Folio ${item.folio} quedó atrás. Reasignando a $folioAEnviar...',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
+      // Verificar si el folio ya fue procesado
+      final yaFueProcesado = await FolioService.folioYaFueProcesado(
+        folioAEnviar,
+      );
+      if (yaFueProcesado) {
+        // Si ya existe un PDF con ese folio en servidor, NO eliminar sin más.
+        // Obtenemos un folio nuevo de forma atómica y subimos con ese folio.
+        final nuevoFolio = await FolioService.getAndUpdateFolio();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Folio $folioAEnviar ya existe. Reasignando a $nuevoFolio y subiendo...',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+
+        // Intentar subir con nuevo folio
+        await subirPdfTarea(
+          item.pdfBytes,
+          nuevoFolio,
+          nombreCliente: item.nombreCliente,
+        );
+
+        // Asegurar que el folio en la config no disminuya
+        await FolioService.updateFolio(nuevoFolio);
+
+        // Eliminar la copia local (la que tenía el folio antiguo)
+        await _queueService.removePdfFromQueue(item.folio);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('PDF enviado como Tarea $nuevoFolio'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+
+        // Recargar la lista y salir
+        _loadPendingPdfs();
+        setState(() {
+          _isSending = false;
+        });
+        return;
+      }
+
+      // Enviar PDF con folioAEnviar
+      await subirPdfTarea(
+        item.pdfBytes,
+        folioAEnviar,
+        nombreCliente: item.nombreCliente,
+      );
+
+      // Actualizar folio de forma segura (atómica)
+      await FolioService.updateFolio(folioAEnviar);
 
       // Eliminar de la cola
       await _queueService.removePdfFromQueue(item.folio);
@@ -58,7 +137,7 @@ class _SubidosScreenState extends State<SubidosScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('PDF Tarea ${item.folio} enviado correctamente'),
+            content: Text('PDF Tarea $folioAEnviar enviado correctamente'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -118,7 +197,48 @@ class _SubidosScreenState extends State<SubidosScreen> {
       // Enviar todos los PDFs
       for (var item in items) {
         try {
-          await subirPdfTarea(item.pdfBytes, item.folio);
+          // Verificar si el folio local es menor que el folio actual en servidor
+          int folioAEnviar = item.folio;
+          final lastFolioEnServidor = await FolioService.getLastFolio();
+          if (item.folio < lastFolioEnServidor) {
+            // El folio local quedó atrás, asignar uno nuevo
+            folioAEnviar = await FolioService.getAndUpdateFolio();
+          }
+
+          // Verificar si ya fue procesado
+          final yaFueProcesado = await FolioService.folioYaFueProcesado(
+            folioAEnviar,
+          );
+          if (yaFueProcesado) {
+            // Reasignar folio de forma atómica y subir con el nuevo folio
+            try {
+              final nuevoFolio = await FolioService.getAndUpdateFolio();
+              await subirPdfTarea(
+                item.pdfBytes,
+                nuevoFolio,
+                nombreCliente: item.nombreCliente,
+              );
+              await FolioService.updateFolio(nuevoFolio);
+              await _queueService.removePdfFromQueue(item.folio);
+              enviados++;
+              continue;
+            } catch (e) {
+              errores++;
+              continue;
+            }
+          }
+
+          // Enviar PDF con folio ajustado
+          await subirPdfTarea(
+            item.pdfBytes,
+            folioAEnviar,
+            nombreCliente: item.nombreCliente,
+          );
+
+          // Actualizar folio de forma segura
+          await FolioService.updateFolio(folioAEnviar);
+
+          // Eliminar de la cola
           await _queueService.removePdfFromQueue(item.folio);
           enviados++;
         } catch (e) {
@@ -278,15 +398,30 @@ class _SubidosScreenState extends State<SubidosScreen> {
                       ),
                       child: ListTile(
                         leading: Container(
-                          width: 50,
-                          height: 50,
+                          width: 56,
+                          height: 56,
                           decoration: BoxDecoration(
                             color: Colors.red[100],
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Icon(
-                            Icons.picture_as_pdf,
-                            color: Colors.red[700],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.picture_as_pdf,
+                                color: Colors.red,
+                                size: 26,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${item.folio}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         title: Text(
@@ -296,6 +431,11 @@ class _SubidosScreenState extends State<SubidosScreen> {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Text(
+                              'Folio guardado: ${item.folio}',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13),
+                            ),
                             Text(
                               'Cliente: ${item.nombreCliente}',
                               overflow: TextOverflow.ellipsis,

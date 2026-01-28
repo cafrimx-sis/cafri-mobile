@@ -1,0 +1,813 @@
+<mxfile host="app.diagrams.net" modified="2025-12-09" agent="13.0" version="22.1.1" type="device">
+  <diagram name="Flujo Detallado - Autenticación" id="auth_flow">
+    <mxGraphModel dx="1422" dy="788" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- TITULO -->
+        <mxCell id="titulo" value="FLUJO DE AUTENTICACIÓN - LoginScreen" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- INICIO -->
+        <mxCell id="auth_inicio" value="Mostrar LoginScreen&#xa;con Splash" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#90EE90;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="450" y="80" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- VALIDAR CAMPOS -->
+        <mxCell id="validate" value="¿Email y Password&#xa;completos?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFE0;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="220" width="150" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- ERROR VALIDACION -->
+        <mxCell id="error_validate" value="Mostrar Error" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="200" y="245" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- LOADING -->
+        <mxCell id="loading" value="Mostrar CircularProgressIndicator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="370" width="150" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- LLAMAR AUTH SERVICE -->
+        <mxCell id="auth_call" value="AuthService.loginUser()&#xa;(email, password)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="480" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- VERIFICAR RESPUESTA -->
+        <mxCell id="check_response" value="¿Login&#xa;Exitoso?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFE0;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="610" width="150" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- ERROR LOGIN -->
+        <mxCell id="error_login" value="Mostrar Error&#xa;de Autenticación" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="150" y="635" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OBTENER ROL -->
+        <mxCell id="get_role_auth" value="Obtener Rol&#xa;de Firestore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="760" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- SELECCIONAR PANTALLA -->
+        <mxCell id="select_screen" value="¿Cuál es&#xa;el Rol?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFE0;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="425" y="890" width="150" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- IR A ADMIN -->
+        <mxCell id="goto_admin" value="Navegar a&#xa;AdminScreen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="200" y="915" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- IR A COLABORADOR -->
+        <mxCell id="goto_colaborador" value="Navegar a&#xa;ColaboradorScreen" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#87CEEB;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="700" y="915" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FIN -->
+        <mxCell id="auth_fin" value="FIN" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="450" y="1070" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CONECTORES -->
+        <mxCell id="e1" edge="1" parent="1" source="auth_inicio" target="validate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="e2" edge="1" parent="1" source="validate" target="error_validate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="270" />
+            </Array>
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e2">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="-30" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e3" edge="1" parent="1" source="error_validate" target="validate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="170" />
+              <mxPoint x="500" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="e4" edge="1" parent="1" source="validate" target="loading">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="sourcePoint" x="500" y="320" />
+            <mxPoint as="targetPoint" x="500" y="370" />
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e4">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="30" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e5" edge="1" parent="1" source="loading" target="auth_call">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="e6" edge="1" parent="1" source="auth_call" target="check_response">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="e7" edge="1" parent="1" source="check_response" target="error_login">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="660" />
+            </Array>
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e7">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="-20" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e8" edge="1" parent="1" source="error_login" target="validate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="400" />
+              <mxPoint x="350" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="e9" edge="1" parent="1" source="check_response" target="get_role_auth">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="sourcePoint" x="500" y="710" />
+            <mxPoint as="targetPoint" x="500" y="760" />
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e9">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="30" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e10" edge="1" parent="1" source="get_role_auth" target="select_screen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="e11" edge="1" parent="1" source="select_screen" target="goto_admin">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="940" />
+            </Array>
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e11">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="-30" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e12" edge="1" parent="1" source="select_screen" target="goto_colaborador">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="940" />
+            </Array>
+          </mxGeometry>
+          <mxCell style="edgeLabel;resizable=0;html=1;align=center;verticalAlign=middle;" connectable="0" vertex="1" parent="e12">
+            <mxGeometry relative="1" as="geometry">
+              <mxPoint x="30" y="-10" as="offset" />
+            </mxGeometry>
+          </mxCell>
+        </mxCell>
+        
+        <mxCell id="e13" edge="1" parent="1" source="goto_admin" target="auth_fin">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="1070" />
+              <mxPoint x="500" y="1070" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="e14" edge="1" parent="1" source="goto_colaborador" target="auth_fin">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="1070" />
+              <mxPoint x="500" y="1070" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  
+  <diagram name="Flujo Detallado - Panel Administrador" id="admin_flow">
+    <mxGraphModel dx="1422" dy="788" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- TITULO -->
+        <mxCell id="titulo" value="FLUJO PANEL ADMINISTRADOR - AdminScreen" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="800" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- INICIO -->
+        <mxCell id="admin_inicio" value="AdminScreen Inicializa" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#90EE90;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="575" y="80" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CARGAR DATOS USUARIO -->
+        <mxCell id="load_user_data" value="Cargar Datos del Usuario&#xa;(email, foto, nombre)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="220" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- MOSTRAR MENU ADMIN -->
+        <mxCell id="show_menu" value="Mostrar Menú Principal&#xa;con Opciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="340" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- MENU OPCIONES -->
+        <mxCell id="menu_label" value="Opciones del Menú:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 1: DASHBOARD -->
+        <mxCell id="menu1" value="1️⃣ Dashboard&#xa;Métricas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 2: USUARIOS -->
+        <mxCell id="menu2" value="2️⃣ Gestión&#xa;de Usuarios" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 3: CALENDARIO -->
+        <mxCell id="menu3" value="3️⃣ Calendario&#xa;de Actividades" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 4: HISTORIAL -->
+        <mxCell id="menu4" value="4️⃣ Historial&#xa;de Rutas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 5: COTIZACIONES -->
+        <mxCell id="menu5" value="5️⃣ Cotizaciones&#xa;de Servicios" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 6: CLIENTES -->
+        <mxCell id="menu6" value="6️⃣ Ver Clientes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="930" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- SELECTOR DE OPCION -->
+        <mxCell id="select_option" value="¿Qué opción&#xa;selecciona?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFE0;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="660" width="150" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- PROCESOS -->
+        <mxCell id="process_label" value="Procesos por Módulo:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="820" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- DASHBOARD PROCESS -->
+        <mxCell id="dashboard_process" value="• Mostrar gráficas&#xa;• Métricas en tiempo real&#xa;• Información de usuarios&#xa;• Rutas completadas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- USUARIOS PROCESS -->
+        <mxCell id="usuarios_process" value="• CRUD Usuarios&#xa;• Crear/Editar/Eliminar&#xa;• Asignar roles&#xa;• Gestionar permisos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="250" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CALENDARIO PROCESS -->
+        <mxCell id="calendario_process" value="• Ver actividades&#xa;• Programar actividades&#xa;• Asignar colaboradores&#xa;• Notificaciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- HISTORIAL PROCESS -->
+        <mxCell id="historial_process" value="• Ver rutas completadas&#xa;• Filtrar por colaborador&#xa;• Detalles de rutas&#xa;• Exportar reportes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="590" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- COTIZACIONES PROCESS -->
+        <mxCell id="cotizaciones_process" value="• Crear cotizaciones&#xa;• Listar cotizaciones&#xa;• Editar precios&#xa;• Generar PDFs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="760" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CLIENTES PROCESS -->
+        <mxCell id="clientes_process" value="• Listar clientes&#xa;• Ver detalles cliente&#xa;• Contactar cliente&#xa;• Historial interacciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="930" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- VOLVER AL MENU -->
+        <mxCell id="back_to_menu" value="Volver al Menú" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1050" width="150" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- LOGOUT -->
+        <mxCell id="admin_logout" value="Cerrar Sesión" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1170" width="150" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- FIN -->
+        <mxCell id="admin_fin" value="FIN" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="575" y="1300" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CONECTORES -->
+        <mxCell id="ae1" edge="1" parent="1" source="admin_inicio" target="load_user_data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ae2" edge="1" parent="1" source="load_user_data" target="show_menu">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ae3" edge="1" parent="1" source="show_menu" target="select_option">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="625" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae4" edge="1" parent="1" source="menu1" target="dashboard_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae5" edge="1" parent="1" source="menu2" target="usuarios_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae6" edge="1" parent="1" source="menu3" target="calendario_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae7" edge="1" parent="1" source="menu4" target="historial_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae8" edge="1" parent="1" source="menu5" target="cotizaciones_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae9" edge="1" parent="1" source="menu6" target="clientes_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae10" edge="1" parent="1" source="dashboard_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae11" edge="1" parent="1" source="usuarios_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae12" edge="1" parent="1" source="calendario_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae13" edge="1" parent="1" source="historial_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae14" edge="1" parent="1" source="cotizaciones_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae15" edge="1" parent="1" source="clientes_process" target="back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ae16" edge="1" parent="1" source="back_to_menu" target="admin_logout">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ae17" edge="1" parent="1" source="admin_logout" target="admin_fin">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  
+  <diagram name="Flujo Detallado - Panel Colaborador" id="colab_flow">
+    <mxGraphModel dx="1422" dy="788" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- TITULO -->
+        <mxCell id="titulo" value="FLUJO PANEL COLABORADOR - ColaboradorScreen" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="800" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- INICIO -->
+        <mxCell id="colab_inicio" value="ColaboradorScreen Inicializa" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#90EE90;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="575" y="80" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CARGAR DATOS USUARIO -->
+        <mxCell id="colab_load_user_data" value="Cargar Datos del Colaborador&#xa;(email, foto, nombre, ID)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="220" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- MOSTRAR MENU -->
+        <mxCell id="colab_show_menu" value="Mostrar Menú Principal&#xa;con Pestañas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#87CEEB;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="340" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- MENU OPCIONES -->
+        <mxCell id="colab_menu_label" value="Secciones del Menú:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 1: ACTIVIDADES -->
+        <mxCell id="colab_menu1" value="1️⃣ Actividades" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0FF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 2: CALENDARIO -->
+        <mxCell id="colab_menu2" value="2️⃣ Calendario" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0FF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 3: DOCUMENTO/PDF -->
+        <mxCell id="colab_menu3" value="3️⃣ Documento&#xa;(PDF)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0FF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 4: MAPA -->
+        <mxCell id="colab_menu4" value="4️⃣ Mapa &amp; Rutas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0FF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="590" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- OPCION 5: SUBIDOS -->
+        <mxCell id="colab_menu5" value="5️⃣ Documentos&#xa;Subidos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0FF;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="500" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- SELECTOR DE OPCION -->
+        <mxCell id="colab_select_option" value="¿Qué sección&#xa;selecciona?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFE0;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="660" width="150" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- PROCESOS -->
+        <mxCell id="colab_process_label" value="Procesos por Sección:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="820" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- ACTIVIDADES PROCESS -->
+        <mxCell id="colab_activities_process" value="• Ver actividades asignadas&#xa;• Marcar como completada&#xa;• Ver detalles cliente&#xa;• Contactar cliente" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CALENDARIO PROCESS -->
+        <mxCell id="colab_calendario_process" value="• Ver actividades en calendario&#xa;• Filtrar por mes/semana&#xa;• Ver detalles de evento&#xa;• Recibir notificaciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="250" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- PDF PROCESS -->
+        <mxCell id="colab_pdf_process" value="• Generar PDF de actividad&#xa;• Agregar firma digital&#xa;• Adjuntar fotos&#xa;• Enviar a cliente" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="420" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- MAPA PROCESS -->
+        <mxCell id="colab_mapa_process" value="• Ver ubicación actual&#xa;• Ver ruta de actividad&#xa;• Tracking en tiempo real&#xa;• Información de ubicación" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="590" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- SUBIDOS PROCESS -->
+        <mxCell id="colab_subidos_process" value="• Ver documentos subidos&#xa;• Descargar documentos&#xa;• Eliminar documentos&#xa;• Ver historial" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="760" y="860" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- VOLVER AL MENU -->
+        <mxCell id="colab_back_to_menu" value="Volver al Menú" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1050" width="150" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- LOGOUT -->
+        <mxCell id="colab_logout" value="Cerrar Sesión" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="1170" width="150" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- FIN -->
+        <mxCell id="colab_fin" value="FIN" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FFB6C1;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="575" y="1300" width="100" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- CONECTORES -->
+        <mxCell id="ce1" edge="1" parent="1" source="colab_inicio" target="colab_load_user_data">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ce2" edge="1" parent="1" source="colab_load_user_data" target="colab_show_menu">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ce3" edge="1" parent="1" source="colab_show_menu" target="colab_select_option">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="625" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce4" edge="1" parent="1" source="colab_menu1" target="colab_activities_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce5" edge="1" parent="1" source="colab_menu2" target="colab_calendario_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce6" edge="1" parent="1" source="colab_menu3" target="colab_pdf_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce7" edge="1" parent="1" source="colab_menu4" target="colab_mapa_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce8" edge="1" parent="1" source="colab_menu5" target="colab_subidos_process">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="810" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce9" edge="1" parent="1" source="colab_activities_process" target="colab_back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce10" edge="1" parent="1" source="colab_calendario_process" target="colab_back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce11" edge="1" parent="1" source="colab_pdf_process" target="colab_back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce12" edge="1" parent="1" source="colab_mapa_process" target="colab_back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce13" edge="1" parent="1" source="colab_subidos_process" target="colab_back_to_menu">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="1080" />
+              <mxPoint x="625" y="1080" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="ce14" edge="1" parent="1" source="colab_back_to_menu" target="colab_logout">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="ce15" edge="1" parent="1" source="colab_logout" target="colab_fin">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  
+  <diagram name="Arquitectura de Datos" id="data_arch">
+    <mxGraphModel dx="1422" dy="788" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- TITULO -->
+        <mxCell id="titulo" value="ARQUITECTURA DE DATOS Y SERVICIOS" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="800" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- FRONTEND (FLUTTER) -->
+        <mxCell id="frontend" value="FRONTEND&#xa;Flutter App" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0FFFF;strokeColor=#000000;strokeWidth=2;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="100" width="180" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- SERVICIOS (AUTH SERVICE) -->
+        <mxCell id="auth_svc" value="AUTH SERVICE&#xa;• Login/Register&#xa;• Password Reset" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ADD8E6;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="280" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FIREBASE AUTH -->
+        <mxCell id="firebase_auth" value="Firebase Authentication&#xa;(Email/Password)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="300" y="280" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FIRESTORE -->
+        <mxCell id="firestore" value="Cloud Firestore&#xa;Collections:&#xa;• users&#xa;• activities&#xa;• clients&#xa;• routes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="550" y="280" width="180" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- FIREBASE STORAGE -->
+        <mxCell id="storage" value="Firebase Storage&#xa;• PDFs&#xa;• Imágenes&#xa;• Documentos" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="280" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FIREBASE MESSAGING -->
+        <mxCell id="messaging" value="Firebase Cloud&#xa;Messaging (FCM)&#xa;• Notificaciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFD700;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="280" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- EXTERNAL SERVICES -->
+        <mxCell id="external" value="SERVICIOS EXTERNOS" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="440" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- GOOGLE MAPS -->
+        <mxCell id="gmaps" value="Google Maps API&#xa;• Mapas&#xa;• Geolocalización&#xa;• Rutas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="480" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- GEOCODING -->
+        <mxCell id="geocoding" value="Geocoding API&#xa;• Convertir coords&#xa;• Direcciones" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="480" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- GEOLOCATOR -->
+        <mxCell id="geolocator" value="Geolocator Plugin&#xa;• GPS en tiempo real&#xa;• Precisión de ubicación" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="550" y="480" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- COMPASS -->
+        <mxCell id="compass" value="Flutter Compass&#xa;• Brújula digital" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="480" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- LOCAL STORAGE -->
+        <mxCell id="local" value="Local Storage&#xa;• SharedPreferences&#xa;• Caché local" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E0E0;strokeColor=#000000;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="480" width="180" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FLUJOS PRINCIPALES -->
+        <mxCell id="flujos" value="FLUJOS PRINCIPALES" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="640" width="150" height="30" as="geometry" />
+        </mxCell>
+        
+        <!-- FLUJO 1 -->
+        <mxCell id="flujo1" value="🔐 Autenticación&#xa;App → AuthService → Firebase Auth → Firestore (obtener rol)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="680" width="280" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FLUJO 2 -->
+        <mxCell id="flujo2" value="📍 Geolocalización&#xa;Geolocator → Coords → Google Maps → Visualización de ruta" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="680" width="280" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FLUJO 3 -->
+        <mxCell id="flujo3" value="📄 Gestión de Documentos&#xa;PDF generado → Firebase Storage → URL accesible" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="710" y="680" width="280" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- FLUJO 4 -->
+        <mxCell id="flujo4" value="🔔 Notificaciones&#xa;Firebase Messaging → FCM → Notificación en dispositivo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFACD;strokeColor=#000000;strokeWidth=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="680" width="280" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- CONECTORES -->
+        <mxCell id="d1" edge="1" parent="1" source="frontend" target="auth_svc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="d2" edge="1" parent="1" source="frontend" target="gmaps">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="d3" edge="1" parent="1" source="auth_svc" target="firebase_auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="d4" edge="1" parent="1" source="firebase_auth" target="firestore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <mxCell id="d5" edge="1" parent="1" source="frontend" target="firestore">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="d6" edge="1" parent="1" source="frontend" target="storage">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="890" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="d7" edge="1" parent="1" source="frontend" target="messaging">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1140" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

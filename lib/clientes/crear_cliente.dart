@@ -189,7 +189,7 @@ class _ClienteCreateScreenState extends State<ClienteCreateScreen> {
                   children: [
                     // Tipo de cliente
                     DropdownButtonFormField<String>(
-                      value: _tipoCliente,
+                      initialValue: _tipoCliente,
                       decoration: const InputDecoration(
                         labelText: 'Tipo de cliente',
                         prefixIcon: Icon(Icons.person_outline),
