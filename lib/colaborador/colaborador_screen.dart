@@ -13,8 +13,9 @@ import 'package:cafri/colaborador/actividades_screen.dart';
 // import 'package:cafri/colaborador/historial_rutas.dart';
 import 'package:cafri/colaborador/ruta.dart';
 import 'package:cafri/colaborador/subidos.dart';
+import 'package:cafri/colaborador/historial_pdf_colaborador.dart';
 
-enum ColaboradorSection { actividades, calendario, documento, avances, mapa, subidos }
+enum ColaboradorSection { actividades, calendario, documento, avances, historial, mapa, subidos }
 
 /// Widget reutilizable para mostrar el Avatar/Fotografía del usuario (igual al AdminScreen)
 class CustomUserAvatar extends StatelessWidget {
@@ -421,6 +422,12 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
               onTap: () => _handleDrawerSelection(ColaboradorSection.avances),
             ),
             ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Historial de PDFs'),
+              selected: selectedSection == ColaboradorSection.historial,
+              onTap: () => _handleDrawerSelection(ColaboradorSection.historial),
+            ),
+            ListTile(
               leading: const Icon(Icons.file_upload),
               title: const Text('PDFs Pendientes'),
               selected: selectedSection == ColaboradorSection.subidos,
@@ -452,6 +459,8 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
               return const FormularioPDF();
             case ColaboradorSection.avances:
               return const FormularioAvancesPDF();
+            case ColaboradorSection.historial:
+              return const HistorialPdfColaborador();
             case ColaboradorSection.subidos:
               return const SubidosScreen();
             case ColaboradorSection.mapa:

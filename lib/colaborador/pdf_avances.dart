@@ -531,6 +531,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                   maxLines: 4,
                 ),
               ),
+              
               _seccionConTitulo(
                 '7. Firmas',
                 Row(
