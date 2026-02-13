@@ -103,7 +103,8 @@ class _AdminScreenState extends State<AdminScreen> {
     if (user != null) {
       _loadUserInfo(user.uid);
     }
-    _mainContentWidget = _buildMainContent();
+    // No construir contenido aquí para evitar usar Theme.of(context) en initState
+    _mainContentWidget = null;
     _menuGroups = [
       _MenuGroup('Usuarios', Icons.people, [
         _MenuOption('Usuarios', Icons.people, const UserListScreen()),
@@ -194,7 +195,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _goHome() {
     setState(() {
-      _mainContentWidget = _buildMainContent();
+      _mainContentWidget = null; // construir en build() para respetar Theme.of en build
     });
     Navigator.of(context).maybePop();
   }
@@ -283,89 +284,181 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildMainContent() {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color.fromARGB(255, 29, 77, 235),
-            Color.fromARGB(255, 0, 0, 0),
-          ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget kpi(String label, IconData icon, String value) {
+      return Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cs.outlineVariant),
         ),
-      ),
-      child: Center(
-        child: Card(
-          elevation: 12,
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: cs.primary, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              '$label: ',
+              style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+            ),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: cs.onSurface)),
+          ],
+        ),
+      );
+    }
+
+    Widget quickTile(String title, IconData icon, VoidCallback onTap, {Color? bg}) {
+      final base = bg ?? cs.primaryContainer;
+      final fg = isDark ? Colors.white : cs.onPrimaryContainer;
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: base,
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 40),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.indigo.withAlpha(220),
-                        Colors.blue.withAlpha(180),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    // ignore: deprecated_member_use
+                    color: cs.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  padding: const EdgeInsets.all(16),
-                  child: const Icon(
-                    Icons.admin_panel_settings,
-                    size: 64,
-                    color: Colors.white,
-                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: Icon(icon, color: cs.primary, size: 24),
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  '¡Bienvenido, Administrador!',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Gestiona clientes, agenda y más desde este panel.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Divider(
-                  color: Colors.indigo.withAlpha(80),
-                  thickness: 1.2,
-                  indent: 30,
-                  endIndent: 30,
-                ),
-                const SizedBox(height: 10),
+                const Spacer(),
                 Text(
-                  userEmail,
-                  style: const TextStyle(
-                    color: Colors.indigo,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
+                  title,
+                  style: TextStyle(
+                    color: fg,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
                   ),
                 ),
               ],
             ),
           ),
         ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: ListView(
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [cs.primary, cs.tertiary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                padding: const EdgeInsets.all(14),
+                child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('¡Bienvenido, Administrador!',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: cs.onSurface,
+                        )),
+                    const SizedBox(height: 4),
+                    Text(
+                      userEmail,
+                      style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // KPIs
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                kpi('Clientes', Icons.people_alt, '—'),
+                const SizedBox(width: 8),
+                kpi('Hoy', Icons.event_available, '—'),
+                const SizedBox(width: 8),
+                kpi('Pendientes', Icons.pending_actions, '—'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Acciones rápidas
+          Text('Acciones rápidas',
+              style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth > 900
+                  ? 4
+                  : constraints.maxWidth > 600
+                      ? 3
+                      : 2;
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: crossAxisCount,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.25,
+                children: [
+                  quickTile('Usuarios', Icons.people, () => _handleMenuSelection(_menuGroups[0].options[0])),
+                  quickTile('Clientes', Icons.people_alt, () => _handleMenuSelection(_menuGroups[0].options[1])),
+                  quickTile('Servicios', Icons.miscellaneous_services, () => _handleMenuSelection(_menuGroups[1].options[0])),
+                  quickTile('Generar Cotización', Icons.request_quote, () => _handleMenuSelection(_menuGroups[1].options[1])),
+                  quickTile('Cotizaciones', Icons.list_alt, () => _handleMenuSelection(_menuGroups[1].options[2])),
+                  quickTile('Agendar', Icons.event, () => _handleMenuSelection(_menuGroups[2].options[0])),
+                  quickTile('Calendario', Icons.calendar_month, () => _handleMenuSelection(_menuGroups[2].options[1])),
+                  quickTile('Métricas', Icons.bar_chart, () => _handleMenuSelection(_menuGroups[3].options.isNotEmpty ? _menuGroups[4].options[0] : _menuGroups[4].options[0])),
+                  quickTile('PDFs', Icons.picture_as_pdf, () => _handleMenuSelection(_menuGroups[4].options[1])),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          // Recientes (placeholder)
+          Text('Recientes', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(backgroundColor: cs.primary, child: const Icon(Icons.history, color: Colors.white)),
+              title: Text('No hay elementos recientes'),
+              subtitle: Text('Aquí verás tus últimas cotizaciones/actividades'),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
@@ -613,7 +706,7 @@ class _AdminScreenState extends State<AdminScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 29, 77, 235),
+        backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
         toolbarHeight: 68,
         title: _buildProfileInfo(),
