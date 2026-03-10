@@ -7,13 +7,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cafri/colaborador/calendarcolab_screen.dart';
 import 'package:cafri/colaborador/pdf.dart';
+import 'package:cafri/colaborador/pdf_avances.dart';
 import 'package:cafri/colaborador/ubicacion.dart';
 import 'package:cafri/colaborador/actividades_screen.dart';
 // import 'package:cafri/colaborador/historial_rutas.dart';
 import 'package:cafri/colaborador/ruta.dart';
 import 'package:cafri/colaborador/subidos.dart';
 
-enum ColaboradorSection { actividades, calendario, documento, mapa, subidos }
+enum ColaboradorSection { actividades, calendario, documento, avances, mapa, subidos }
 
 /// Widget reutilizable para mostrar el Avatar/Fotografía del usuario (igual al AdminScreen)
 class CustomUserAvatar extends StatelessWidget {
@@ -414,6 +415,12 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
               onTap: () => _handleDrawerSelection(ColaboradorSection.documento),
             ),
             ListTile(
+              leading: const Icon(Icons.trending_up),
+              title: const Text('Reporte de Avances'),
+              selected: selectedSection == ColaboradorSection.avances,
+              onTap: () => _handleDrawerSelection(ColaboradorSection.avances),
+            ),
+            ListTile(
               leading: const Icon(Icons.file_upload),
               title: const Text('PDFs Pendientes'),
               selected: selectedSection == ColaboradorSection.subidos,
@@ -443,6 +450,8 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
               return _buildCalendario();
             case ColaboradorSection.documento:
               return const FormularioPDF();
+            case ColaboradorSection.avances:
+              return const FormularioAvancesPDF();
             case ColaboradorSection.subidos:
               return const SubidosScreen();
             case ColaboradorSection.mapa:

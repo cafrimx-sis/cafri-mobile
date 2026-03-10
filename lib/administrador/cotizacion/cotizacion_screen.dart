@@ -541,7 +541,7 @@ class _CotizacionScreenState extends State<CotizacionScreen> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<double>(
-                      value: impuestoSeleccionado,
+                      initialValue: impuestoSeleccionado,
                       decoration: const InputDecoration(
                         labelText: 'Impuesto',
                         border: OutlineInputBorder(),

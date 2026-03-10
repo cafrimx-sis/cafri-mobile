@@ -12,34 +12,64 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ / Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
+# VSCode (si quieres subir configuraciones quita el #)
 #.vscode/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# Flutter / Dart
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
-/build/
+build/
 
-# Symbolication related
+# Flutter docs
+**/doc/api/
+
+# iOS Flutter
+**/ios/Flutter/.last_build_id
+
+# Symbolication
 app.*.symbols
 
-# Obfuscation related
+# Obfuscation
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android build outputs
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+/android/app/build/
+
+# Gradle
+.gradle/
+
+# Reportes generados
+android/build/reports/
+
+# Archivos generados por plugins
+linux/flutter/generated_plugin_registrant.*
+windows/flutter/generated_plugin_registrant.*
+macos/Flutter/GeneratedPluginRegistrant.swift
+linux/flutter/generated_plugins.cmake
+windows/flutter/generated_plugins.cmake
+
+# Firebase cache
+.firebase/
+
+# Claves de firma Android (MUY IMPORTANTE NO SUBIR)
+key.properties
+*.jks
+*.keystore
+
+# APK / AAB generados
+*.apk
+*.aab

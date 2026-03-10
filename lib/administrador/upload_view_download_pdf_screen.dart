@@ -20,17 +20,22 @@ class PdfListScreen extends StatefulWidget {
 }
 
 class _PdfListScreenState extends State<PdfListScreen> {
-  late final Reference _pdfsRef;
+  late final Reference _pdfsRefTareas;
+  late final Reference _pdfsRefAvances;
   List<PdfFileWithDate> _allFiles = [];
   List<PdfFileWithDate> _filteredFiles = [];
   bool _loading = true;
   String _search = '';
   final TextEditingController _searchController = TextEditingController();
+  
+  // Selector de tipo de PDF
+  String _selectedType = 'tareas'; // 'tareas' o 'avances'
 
   @override
   void initState() {
     super.initState();
-    _pdfsRef = FirebaseStorage.instance.ref('pdfs/tareas');
+    _pdfsRefTareas = FirebaseStorage.instance.ref('pdfs/tareas');
+    _pdfsRefAvances = FirebaseStorage.instance.ref('pdfs/avances');
     _fetchFiles();
     _searchController.addListener(_filterFiles);
   }
@@ -44,7 +49,10 @@ class _PdfListScreenState extends State<PdfListScreen> {
   Future<void> _fetchFiles() async {
     setState(() => _loading = true);
     try {
-      final result = await _pdfsRef.listAll();
+      // Seleccionar la referencia según el tipo
+      final pdfsRef = _selectedType == 'tareas' ? _pdfsRefTareas : _pdfsRefAvances;
+      
+      final result = await pdfsRef.listAll();
       List<PdfFileWithDate> filesWithDates = [];
 
       for (var ref in result.items) {
@@ -195,6 +203,25 @@ class _PdfListScreenState extends State<PdfListScreen> {
       ),
       body: Column(
         children: [
+          // Selector de tipo de PDF
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(label: Text("Tareas"), value: 'tareas'),
+                ButtonSegment(label: Text("Avances"), value: 'avances'),
+              ],
+              selected: {_selectedType},
+              onSelectionChanged: (newSelection) {
+                setState(() {
+                  _selectedType = newSelection.first;
+                  _searchController.clear();
+                  _fetchFiles();
+                });
+              },
+            ),
+          ),
+          // Campo de búsqueda
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(

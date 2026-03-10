@@ -87,7 +87,7 @@ class _DashboardMetricasActividadesConFiltroState
                   const SizedBox(width: 7),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _usuarioIdSeleccionado.isEmpty
+                      initialValue: _usuarioIdSeleccionado.isEmpty
                           ? null
                           : _usuarioIdSeleccionado,
                       isExpanded: true,

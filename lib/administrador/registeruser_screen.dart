@@ -595,7 +595,7 @@ class _RegisteruserScreenState extends State<RegisteruserScreen> {
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<String>(
-                            value: _gender,
+                            initialValue: _gender,
                             decoration: InputDecoration(
                               labelText: 'Género',
                               border: OutlineInputBorder(
@@ -622,7 +622,7 @@ class _RegisteruserScreenState extends State<RegisteruserScreen> {
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<String>(
-                            value: _status,
+                            initialValue: _status,
                             decoration: InputDecoration(
                               labelText: 'Estado',
                               border: OutlineInputBorder(
@@ -650,7 +650,7 @@ class _RegisteruserScreenState extends State<RegisteruserScreen> {
                           const SizedBox(height: 16),
                           // Notas eliminadas
                           DropdownButtonFormField<String>(
-                            value: _selectedRol,
+                            initialValue: _selectedRol,
                             decoration: InputDecoration(
                               labelText: 'Rol',
                               border: OutlineInputBorder(

@@ -6,23 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
+import 'package:pdf/pdf.dart' as ppdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'folio_service.dart';
 
 // Modelo para una hoja/formulario individual (excepto datos de cliente)
 class HojaServicioData {
-  final TextEditingController actividadResponsableController =
-      TextEditingController();
   final TextEditingController actividadTipoTareaController =
       TextEditingController();
   final TextEditingController descripcionTareaController =
-      TextEditingController();
-  final TextEditingController modeloEvaporadorController =
-      TextEditingController();
-  final TextEditingController serieEvaporadorController =
-      TextEditingController();
-  final TextEditingController capacidadEvaporadorController =
       TextEditingController();
   final TextEditingController descripcionTrabajoRealizadoController =
       TextEditingController();
@@ -45,6 +38,7 @@ class HojaServicioData {
       TextEditingController();
 
   final List<Uint8List> imagenesEvaporadores = [];
+  Uint8List? imagenModeloSerieCapacidad;
 
   Uint8List? firmaTecnico;
   Uint8List? firmaRecibe;
@@ -65,12 +59,8 @@ class HojaServicioData {
       TextEditingController();
 
   void dispose() {
-    actividadResponsableController.dispose();
     actividadTipoTareaController.dispose();
     descripcionTareaController.dispose();
-    modeloEvaporadorController.dispose();
-    serieEvaporadorController.dispose();
-    capacidadEvaporadorController.dispose();
     descripcionTrabajoRealizadoController.dispose();
     firmaTecnicoController.dispose();
     firmaRecibeController.dispose();
@@ -84,12 +74,8 @@ class HojaServicioData {
   }
 
   void clear() {
-    actividadResponsableController.clear();
     actividadTipoTareaController.clear();
     descripcionTareaController.clear();
-    modeloEvaporadorController.clear();
-    serieEvaporadorController.clear();
-    capacidadEvaporadorController.clear();
     descripcionTrabajoRealizadoController.clear();
     firmaTecnico = null;
     firmaRecibe = null;
@@ -106,17 +92,15 @@ class HojaServicioData {
     descripcionProcesoController.clear();
     descripcionFinController.clear();
     imagenesEvaporadores.clear();
+    imagenModeloSerieCapacidad = null;
     materialUtilizadoController.clear(); // NUEVO
     observacionesController.clear(); // NUEVO
   }
 
   Map<String, dynamic> toMap() => {
-    'Responsable': actividadResponsableController.text,
     'tipoTarea': actividadTipoTareaController.text,
     'descripcionTarea': descripcionTareaController.text,
-    'modeloEvaporador': modeloEvaporadorController.text,
-    'serieEvaporador': serieEvaporadorController.text,
-    'capacidadEvaporador': capacidadEvaporadorController.text,
+    'imagenModeloSerieCapacidad': imagenModeloSerieCapacidad,
     'descripcionTrabajoRealizado': descripcionTrabajoRealizadoController.text,
     'materialUtilizado': materialUtilizadoController.text, // NUEVO
     'observaciones': observacionesController.text, // NUEVO
@@ -152,9 +136,16 @@ class FormularioPDF extends StatefulWidget {
 }
 
 class _FormularioPDFState extends State<FormularioPDF> {
+  static const _colorSurface = Color(0xFFF7F9FC);
+  static const _colorCard = Colors.white;
+  static const _colorHeader = Color(0xFF0F4C81);
+  static const double _photoThumbSize = 90;
+  static const double _photoGap = 12;
+
   // Campos de cliente (únicos)
   final TextEditingController campoNombreCliente = TextEditingController();
   final TextEditingController atencion = TextEditingController();
+  final TextEditingController responsableGlobal = TextEditingController();
 
   // Lista dinámica de hojas (formularios)
   final List<HojaServicioData> hojas = [HojaServicioData()];
@@ -185,6 +176,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
     }
     campoNombreCliente.dispose();
     atencion.dispose();
+    responsableGlobal.dispose();
     super.dispose();
   }
 
@@ -193,15 +185,14 @@ class _FormularioPDFState extends State<FormularioPDF> {
     if (campoNombreCliente.text.trim().isEmpty) {
       return 'Nombre del cliente es obligatorio.';
     }
+    if (responsableGlobal.text.trim().isEmpty) {
+      return 'Nombre del responsable es obligatorio.';
+    }
 
     // Por cada hoja
     for (int i = 0; i < hojas.length; i++) {
       final hoja = hojas[i];
       final noHoja = i + 1;
-
-      if (hoja.actividadResponsableController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: El campo "Responsable" es obligatorio.';
-      }
 
       if (hoja.imagenesEvaporadores.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 imagen de evaporador/condensador.';
@@ -252,6 +243,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
   void _limpiarFormulario() {
     campoNombreCliente.clear();
     atencion.clear();
+    responsableGlobal.clear();
     for (final hoja in hojas) {
       hoja.dispose();
     }
@@ -267,16 +259,24 @@ class _FormularioPDFState extends State<FormularioPDF> {
           final idx = entry.key;
           final hoja = entry.value;
           return Card(
+            elevation: 2,
+            shadowColor: Colors.black12,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 children: [
                   Row(
                     children: [
                       Text(
                         'Hoja ${idx + 1}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                       const Spacer(),
                       if (hojas.length > 1)
@@ -292,39 +292,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     ],
                   ),
                   // Actividades
-                  TextField(
-                    controller: hoja.actividadResponsableController,
-                    decoration: const InputDecoration(labelText: 'Responsable'),
-                  ),
-                  // Modelo, serie, capacidad
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: hoja.modeloEvaporadorController,
-                          decoration: const InputDecoration(
-                            labelText: 'Modelo',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: hoja.serieEvaporadorController,
-                          decoration: const InputDecoration(labelText: 'Serie'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: hoja.capacidadEvaporadorController,
-                          decoration: const InputDecoration(
-                            labelText: 'Capacidad',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Imagen modelo, serie y capacidad
+                  _modeloSerieCapacidadImagenWidget(hoja),
                   const SizedBox(height: 8),
                   // Imágenes de evaporadores
                   _imagenesEvaporadoresWidget(hoja),
@@ -374,27 +343,26 @@ class _FormularioPDFState extends State<FormularioPDF> {
                   // Descripción trabajo realizado
                   TextField(
                     controller: hoja.descripcionTrabajoRealizadoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descripción del trabajo realizado',
+                    decoration: _inputDecoration(
+                      'Descripción del trabajo realizado',
                     ),
                     maxLines: 3,
                   ),
+                  const SizedBox(height: 8),
                   // NUEVO: Material utilizado
                   TextField(
                     controller: hoja.materialUtilizadoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Material utilizado',
-                    ),
+                    decoration: _inputDecoration('Material utilizado'),
                     maxLines: 2,
                   ),
+                  const SizedBox(height: 8),
                   // NUEVO: Observaciones
                   TextField(
                     controller: hoja.observacionesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Observaciones',
-                    ),
+                    decoration: _inputDecoration('Observaciones'),
                     maxLines: 2,
                   ),
+                  const SizedBox(height: 12),
                   // Firmas
                   Row(
                     children: [
@@ -438,8 +406,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
         }),
         Align(
           alignment: Alignment.centerLeft,
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.add),
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add_circle_outline),
             label: const Text('Agregar otra hoja'),
             onPressed: () {
               setState(() {
@@ -452,18 +420,84 @@ class _FormularioPDFState extends State<FormularioPDF> {
     );
   }
 
+  Widget _modeloSerieCapacidadImagenWidget(HojaServicioData hoja) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _tituloBloque('MODELO, SERIE, CAPACIDAD DE CONDENSADORES'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: _photoGap,
+          runSpacing: _photoGap,
+          children: [
+            if (hoja.imagenModeloSerieCapacidad != null)
+              Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      hoja.imagenModeloSerieCapacidad!,
+                      width: _photoThumbSize,
+                      height: _photoThumbSize,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        hoja.imagenModeloSerieCapacidad = null;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            GestureDetector(
+              onTap: () async {
+                final picker = ImagePicker();
+                final XFile? picked = await picker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 1280,
+                  maxHeight: 1280,
+                  imageQuality: 75,
+                );
+                if (picked == null) return;
+                final bytes = await picked.readAsBytes();
+                setState(() {
+                  hoja.imagenModeloSerieCapacidad = bytes;
+                });
+              },
+              child: Container(
+                width: _photoThumbSize,
+                height: _photoThumbSize,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey),
+                ),
+                child: const Icon(
+                  Icons.add_a_photo,
+                  size: 32,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _imagenesEvaporadoresWidget(HojaServicioData hoja) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Imágenes de los evaporadores/condensadores',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        _tituloBloque('Imágenes de los evaporadores/condensadores'),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: _photoGap,
+          runSpacing: _photoGap,
           children: [
             ...hoja.imagenesEvaporadores.map(
               (imgBytes) => Stack(
@@ -473,8 +507,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.memory(
                       imgBytes,
-                      width: 90,
-                      height: 90,
+                      width: _photoThumbSize,
+                      height: _photoThumbSize,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -492,7 +526,11 @@ class _FormularioPDFState extends State<FormularioPDF> {
             GestureDetector(
               onTap: () async {
                 final picker = ImagePicker();
-                final List<XFile>? pickedList = await picker.pickMultiImage();
+                final List<XFile>? pickedList = await picker.pickMultiImage(
+                  maxWidth: 1280,
+                  maxHeight: 1280,
+                  imageQuality: 75,
+                );
                 if (pickedList != null && pickedList.isNotEmpty) {
                   final bytesList = await Future.wait(
                     pickedList.map((xfile) => xfile.readAsBytes()),
@@ -503,8 +541,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                 }
               },
               child: Container(
-                width: 90,
-                height: 90,
+                width: _photoThumbSize,
+                height: _photoThumbSize,
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(8),
@@ -532,7 +570,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
   }) {
     return Column(
       children: [
-        Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
+        _tituloBloque(titulo),
         const SizedBox(height: 4),
         if (firma != null)
           Column(
@@ -674,9 +712,16 @@ class _FormularioPDFState extends State<FormularioPDF> {
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey),
+        color: _colorCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,8 +772,16 @@ class _FormularioPDFState extends State<FormularioPDF> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(8),
+        color: _colorCard,
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -736,7 +789,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: const BoxDecoration(
-              color: Color(0xFFE0E0E0),
+              color: _colorHeader,
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(8),
                 topRight: Radius.circular(8),
@@ -748,6 +801,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
+                  color: Colors.white,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -755,6 +809,40 @@ class _FormularioPDFState extends State<FormularioPDF> {
           ),
           Padding(padding: const EdgeInsets.all(12.0), child: child),
         ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: const Color(0xFFF8FAFD),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Colors.black12),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    );
+  }
+
+  Widget _tituloBloque(String titulo) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: _colorHeader,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        titulo,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 13,
+        ),
       ),
     );
   }
@@ -774,133 +862,238 @@ class _FormularioPDFState extends State<FormularioPDF> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ejemplo PDF Tabla')),
+      backgroundColor: _colorSurface,
+      appBar: AppBar(
+        title: const Text('Hoja de servicio'),
+        elevation: 0,
+        backgroundColor: _colorHeader,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _encabezadoCafri(),
-              Row(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 980),
+              child: Column(
                 children: [
-                  const Text(
-                    'Folio (Tarea): ',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    folioActual.toString(),
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: campoNombreCliente,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre del cliente',
-                ),
-              ),
-              const SizedBox(height: 16),
-              _seccionConTitulo('Hojas de servicio', _hojasWidget()),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.picture_as_pdf),
-                label: const Text('Guardar como PDF'),
-                onPressed: () async {
-                  // 1. Primero valida los campos obligatorios
-                  final error = validarCamposObligatorios();
-                  if (error != null) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(error)));
-                    return; // Detén el flujo si faltan campos
-                  }
-
-                  // 2. Ahora sí, pide confirmación
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Confirmar generación de PDF'),
-                      content: const Text(
-                        'Estás a punto de generar el PDF. ¿Está todo correcto?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text('Cancelar'),
+                  _encabezadoCafri(),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _colorCard,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.confirmation_number_outlined),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Folio (Tarea): ',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text('Sí, continuar'),
+                        Text(
+                          folioActual.toString(),
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ],
                     ),
-                  );
-                  if (confirm != true) return;
-
-                  final logoBytes = await rootBundle.load(
-                    'lib/assets/cafrilogo.png',
-                  );
-                  final logoUint8List = logoBytes.buffer.asUint8List();
-
-                  final hojasList = hojas.map((h) => h.toMap()).toList();
-
-                  // --- CAMBIO CLAVE: Guarda el folio actual en una variable local ---
-                  final folioParaPDF = folioActual!;
-
-                  final pdfBytes = await PdfGenerator.generatePdf(
-                    folio: folioParaPDF,
-                    nombreCliente: campoNombreCliente.text,
-                    atencion: atencion.text,
-                    hojas: hojasList,
-                    fechaFormateada: fechaFormateada,
-                    logoBytes: logoUint8List,
-                  );
-
-                  try {
-                    await subirPdfTarea(
-                      pdfBytes,
-                      folioParaPDF,
-                      nombreCliente: campoNombreCliente.text,
-                    );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'PDF enviado al área administrativa exitosamente',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: campoNombreCliente,
+                    decoration: _inputDecoration('Nombre del cliente'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: responsableGlobal,
+                    decoration: _inputDecoration('Nombre del responsable'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: atencion,
+                    decoration: _inputDecoration('Atención'),
+                  ),
+                  const SizedBox(height: 16),
+                  _seccionConTitulo('Hojas de servicio', _hojasWidget()),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Guardar como PDF'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _colorHeader,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        backgroundColor: Colors.green,
                       ),
-                    );
-                  } catch (e) {
-                    // Si hay error de conexión, el PDF se guarda en la cola
-                    String mensaje = e.toString();
-                    if (mensaje.contains('Sin conexión')) {
-                      mensaje =
-                          'Sin conexión: PDF guardado en la cola. Puedes enviarlo después.';
-                    }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(mensaje),
-                        backgroundColor: Colors.orange,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  }
+                      onPressed: () async {
+                        // 1. Primero valida los campos obligatorios
+                        final error = validarCamposObligatorios();
+                        if (error != null) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(error)));
+                          return; // Detén el flujo si faltan campos
+                        }
 
-                  await FolioService.updateFolio(folioParaPDF);
-                  setState(() {
-                    folioActual = folioParaPDF + 1;
-                    _limpiarFormulario();
-                  });
+                        // 2. Ahora sí, pide confirmación
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Confirmar generación de PDF'),
+                            content: const Text(
+                              'Estás a punto de generar el PDF. ¿Está todo correcto?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(false),
+                                child: const Text('Cancelar'),
+                              ),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.of(context).pop(true),
+                                child: const Text('Sí, continuar'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm != true) return;
 
-                  await Printing.layoutPdf(
-                    onLayout: (format) async => pdfBytes,
-                    name:
-                        'Tarea($folioParaPDF).pdf', // Usa el folio correcto aquí
-                  );
-                },
+                        // Mostrar indicador de progreso
+                        if (!mounted) return;
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Dialog(
+                            child: Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(height: 16),
+                                  Text('Generando y enviando PDF...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+
+                        try {
+                          final logoBytes = await rootBundle.load(
+                            'lib/assets/cafrilogo.png',
+                          );
+                          final logoUint8List = logoBytes.buffer.asUint8List();
+
+                          final hojasList = hojas
+                              .map((h) => h.toMap())
+                              .toList();
+
+                          // --- CAMBIO CLAVE: Guarda el folio actual en una variable local ---
+                          final folioParaPDF = folioActual!;
+
+                          final pdfBytes = await PdfGenerator.generatePdf(
+                            folio: folioParaPDF,
+                            nombreCliente: campoNombreCliente.text,
+                            responsable: responsableGlobal.text,
+                            atencion: atencion.text,
+                            hojas: hojasList,
+                            fechaFormateada: fechaFormateada,
+                            logoBytes: logoUint8List,
+                          );
+
+                          // Validar que el PDF se generó correctamente
+                          if (pdfBytes.isEmpty) {
+                            throw Exception('El PDF generado está vacío');
+                          }
+
+                          try {
+                            await subirPdfTarea(
+                              pdfBytes,
+                              folioParaPDF,
+                              nombreCliente: campoNombreCliente.text,
+                            );
+                          } catch (e) {
+                            // Error al subir, pero puede estar en cola
+                            final errorMsg = e.toString();
+                            if (mounted) {
+                              Navigator.of(
+                                context,
+                              ).pop(); // Cerrar diálogo de progreso
+                            }
+
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(errorMsg),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                            return;
+                          }
+
+                          // Si llegamos aquí, la subida fue exitosa
+                          await FolioService.updateFolio(folioParaPDF);
+
+                          if (mounted) {
+                            Navigator.of(
+                              context,
+                            ).pop(); // Cerrar diálogo de progreso
+                          }
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '✓ PDF enviado exitosamente\nFolio: $folioParaPDF',
+                              ),
+                              backgroundColor: Colors.green,
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+
+                          setState(() {
+                            folioActual = folioParaPDF + 1;
+                            _limpiarFormulario();
+                          });
+
+                          await Printing.layoutPdf(
+                            onLayout: (format) async => pdfBytes,
+                            name: 'Tarea($folioParaPDF).pdf',
+                          );
+                        } catch (e) {
+                          if (mounted) {
+                            Navigator.of(
+                              context,
+                            ).pop(); // Cerrar diálogo de progreso
+                          }
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: ${e.toString()}'),
+                              backgroundColor: Colors.red,
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -930,9 +1123,17 @@ class FotosFilaDescripcion extends StatefulWidget {
 }
 
 class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
+  static const double _photoThumbSize = 90;
+  static const double _photoGap = 12;
+  static const _titleBg = Color(0xFF0F4C81);
+
   Future<void> _agregarFoto() async {
     final picker = ImagePicker();
-    final List<XFile>? pickedList = await picker.pickMultiImage();
+    final List<XFile>? pickedList = await picker.pickMultiImage(
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 75,
+    );
     if (pickedList != null && pickedList.isNotEmpty) {
       final bytesList = await Future.wait(
         pickedList.map((xfile) => xfile.readAsBytes()),
@@ -949,14 +1150,27 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          widget.titulo,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _titleBg,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            widget.titulo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
         ),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: _photoGap,
+          runSpacing: _photoGap,
           children: [
             ...widget.fotos.asMap().entries.map((entry) {
               final idx = entry.key;
@@ -968,8 +1182,8 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
                     borderRadius: BorderRadius.circular(8),
                     child: Image.memory(
                       imgBytes,
-                      width: 90,
-                      height: 90,
+                      width: _photoThumbSize,
+                      height: _photoThumbSize,
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -986,8 +1200,8 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
             GestureDetector(
               onTap: _agregarFoto,
               child: Container(
-                width: 90,
-                height: 90,
+                width: _photoThumbSize,
+                height: _photoThumbSize,
                 decoration: BoxDecoration(
                   color: Colors.grey[200],
                   borderRadius: BorderRadius.circular(8),
@@ -1005,7 +1219,16 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
         const SizedBox(height: 8),
         TextField(
           controller: widget.descripcionController,
-          decoration: const InputDecoration(labelText: 'Descripción'),
+          decoration: InputDecoration(
+            labelText: 'Descripción',
+            filled: true,
+            fillColor: const Color(0xFFF8FAFD),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Colors.black12),
+            ),
+          ),
           maxLines: 2,
         ),
       ],
@@ -1015,9 +1238,14 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
 
 // Generador de PDF multipágina
 class PdfGenerator {
+  static const double _pdfModelImageSize = 90;
+  static const double _pdfPhotoSize = _pdfModelImageSize;
+  static const double _pdfPhotoGap = 12;
+
   static Future<Uint8List> generatePdf({
     required int folio,
     required String nombreCliente,
+    required String responsable,
     required String atencion,
     required List<Map<String, dynamic>> hojas,
     required String fechaFormateada,
@@ -1025,189 +1253,220 @@ class PdfGenerator {
   }) async {
     final pdf = pw.Document();
 
+    pw.Widget buildPdfTitulo(String titulo) {
+      return pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: pw.BoxDecoration(
+          color: ppdf.PdfColor.fromInt(0xFF0F4C81),
+        ),
+        child: pw.Text(
+          titulo,
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+            color: ppdf.PdfColor.fromInt(0xFFFFFFFF),
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+      );
+    }
+
     pw.Widget buildFotoFila(List fotos, String descripcion, String titulo) {
       if (fotos.isEmpty) {
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(
-              titulo,
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo(titulo),
             pw.SizedBox(height: 4),
             pw.Text('No hay fotos agregadas.'),
             pw.SizedBox(height: 8),
             if (descripcion.isNotEmpty)
-              pw.Text(descripcion, style: pw.TextStyle(fontSize: 10)),
+              pw.Text(
+                descripcion,
+                style: pw.TextStyle(fontSize: 10),
+              ),
           ],
         );
       }
       return pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(titulo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          buildPdfTitulo(titulo),
           pw.SizedBox(height: 4),
           pw.Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: _pdfPhotoGap,
+            runSpacing: _pdfPhotoGap,
             children: fotos.map<pw.Widget>((imgBytes) {
-              return pw.Container(
-                width: 90,
-                height: 90,
-                child: pw.Image(pw.MemoryImage(imgBytes), fit: pw.BoxFit.cover),
+              return pw.ClipRRect(
+                horizontalRadius: 6,
+                verticalRadius: 6,
+                child: pw.Container(
+                  width: _pdfPhotoSize,
+                  height: _pdfPhotoSize,
+                  child: pw.Image(
+                    pw.MemoryImage(imgBytes),
+                    fit: pw.BoxFit.cover,
+                  ),
+                ),
               );
             }).toList(),
           ),
           pw.SizedBox(height: 4),
           if (descripcion.isNotEmpty)
-            pw.Text(descripcion, style: pw.TextStyle(fontSize: 10)),
+            pw.Text(
+              descripcion,
+              style: pw.TextStyle(fontSize: 10),
+            ),
           pw.SizedBox(height: 8),
         ],
       );
     }
 
     pw.Widget buildImagenesEvaporadores(List imagenes) {
-      if (imagenes.isEmpty) return pw.Text('No hay imágenes agregadas.');
+      if (imagenes.isEmpty) {
+        return pw.Text('No hay imágenes agregadas.');
+      }
       return pw.Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: _pdfPhotoGap,
+        runSpacing: _pdfPhotoGap,
         children: imagenes
             .map<pw.Widget>(
-              (imgBytes) => pw.Container(
-                width: 90,
-                height: 90,
-                child: pw.Image(pw.MemoryImage(imgBytes), fit: pw.BoxFit.cover),
+              (imgBytes) => pw.ClipRRect(
+                horizontalRadius: 6,
+                verticalRadius: 6,
+                child: pw.Container(
+                  width: _pdfPhotoSize,
+                  height: _pdfPhotoSize,
+                  child: pw.Image(
+                    pw.MemoryImage(imgBytes),
+                    fit: pw.BoxFit.cover,
+                  ),
+                ),
               ),
             )
             .toList(),
       );
     }
 
+    // Header and footer builders
+    pw.Widget buildPdfHeader(Uint8List logo, String fecha, int folio, String cliente) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: 70,
+                height: 70,
+                child: pw.Image(
+                  pw.MemoryImage(logo),
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+              pw.SizedBox(width: 14),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'HOJA DE SERVICIO',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text('Teléfono: (999) 102 1232', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Número de identificación empresarial: AAF2306305G0', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Email: contacto@cafrimx.com', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230', style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Fecha: $fecha', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Folio (Tarea): $folio', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Cliente: $cliente', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Divider(thickness: 1),
+        ],
+      );
+    }
+
+    pw.Widget buildPdfFooter(pw.Context context) {
+      return pw.Column(
+        children: [
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'CAFMI — confidencial',
+                style: const pw.TextStyle(fontSize: 9, color: ppdf.PdfColor.fromInt(0xFF777777)),
+              ),
+              pw.Text(
+                'Página ${context.pageNumber} de ${context.pagesCount}',
+                style: const pw.TextStyle(fontSize: 9, color: ppdf.PdfColor.fromInt(0xFF777777)),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
     for (final hoja in hojas) {
       pdf.addPage(
         pw.MultiPage(
+          margin: const pw.EdgeInsets.all(24),
+          header: (context) => buildPdfHeader(logoBytes, fechaFormateada, folio, nombreCliente),
+          footer: (context) => buildPdfFooter(context),
           build: (context) => [
-            pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Container(
-                  width: 80,
-                  height: 80,
-                  child: pw.Image(
-                    pw.MemoryImage(logoBytes),
-                    fit: pw.BoxFit.contain,
-                  ),
-                ),
-                pw.SizedBox(width: 16),
-                pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'HOJA DE SERVICIO',
-                        style: pw.TextStyle(
-                          fontSize: 18,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.Text(
-                        'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                      ),
-                      pw.Text('Teléfono: (999) 102 1232'),
-                      pw.Text(
-                        'Número de identificación empresarial: AAF2306305G0',
-                      ),
-                      pw.Text('Email: contacto@cafrimx.com'),
-                      pw.Text(
-                        'Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 8),
-            pw.Text('Fecha: $fechaFormateada'),
-            pw.Text(
-              'Folio (Tarea): $folio',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
-            pw.Divider(),
+            pw.SizedBox(height: 4),
 
-            pw.Text(
-              'Información del cliente',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Información del cliente'),
             pw.Text('Nombre del cliente: $nombreCliente'),
-            pw.Text('atencion: $atencion'),
+            pw.Text('Nombre del responsable: $responsable'),
+            pw.Text('Atención: $atencion'),
             pw.SizedBox(height: 8),
 
-            pw.Text(
-              'Información de las actividades',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Información de las actividades'),
             pw.Text('Tipo de tarea: ${hoja['tipoTarea'] ?? ''}'),
             pw.Text(
               'Descripción de la tarea: ${hoja['descripcionTarea'] ?? ''}',
             ),
             pw.SizedBox(height: 8),
 
-            pw.Text(
-              'MODELO, SERIE, CAPACIDAD DE CONDENSADORES',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
-            pw.Table(
-              border: pw.TableBorder.all(),
-              children: [
-                pw.TableRow(
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        'Modelo',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        'Serie',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        'Capacidad',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                  ],
+            buildPdfTitulo('MODELO, SERIE, CAPACIDAD DE CONDENSADORES'),
+            pw.SizedBox(height: 4),
+            if (hoja['imagenModeloSerieCapacidad'] != null)
+              pw.ClipRRect(
+                horizontalRadius: 6,
+                verticalRadius: 6,
+                child: pw.Image(
+                  pw.MemoryImage(hoja['imagenModeloSerieCapacidad']),
+                  width: _pdfModelImageSize,
+                  height: _pdfModelImageSize,
+                  fit: pw.BoxFit.cover,
                 ),
-                pw.TableRow(
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(hoja['modeloEvaporador'] ?? ''),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(hoja['serieEvaporador'] ?? ''),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(hoja['capacidadEvaporador'] ?? ''),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              )
+            else
+              pw.Text('No hay imagen agregada.'),
             pw.SizedBox(height: 8),
 
-            pw.Text(
-              'Imágenes de los evaporadores/condensadores',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Imágenes de los evaporadores/condensadores'),
             buildImagenesEvaporadores(hoja['imagenesEvaporadores'] ?? []),
             pw.SizedBox(height: 8),
 
@@ -1237,37 +1496,27 @@ class PdfGenerator {
             ),
             pw.SizedBox(height: 20),
 
-            pw.Text(
-              'Descripción del trabajo realizado',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Descripción del trabajo realizado'),
             pw.Text(hoja['descripcionTrabajoRealizado'] ?? ''),
             pw.SizedBox(height: 12),
 
             // NUEVOS APARTADOS
-            pw.Text(
-              'Material utilizado',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Material utilizado'),
             pw.Text(hoja['materialUtilizado'] ?? ''),
             pw.SizedBox(height: 12),
 
-            pw.Text(
-              'Observaciones',
-              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            ),
+            buildPdfTitulo('Observaciones'),
             pw.Text(hoja['observaciones'] ?? ''),
             pw.SizedBox(height: 12),
 
             pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
               children: [
                 pw.Expanded(
                   child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
-                      pw.Text(
-                        'Firma del técnico',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
+                      buildPdfTitulo('Firma del técnico'),
                       if (hoja['firmaTecnico'] != null)
                         pw.Image(
                           pw.MemoryImage(hoja['firmaTecnico']),
@@ -1280,11 +1529,9 @@ class PdfGenerator {
                 ),
                 pw.Expanded(
                   child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
-                      pw.Text(
-                        'Firma de quien recibe',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
+                      buildPdfTitulo('Firma de quien recibe'),
                       if (hoja['firmaRecibe'] != null)
                         pw.Image(
                           pw.MemoryImage(hoja['firmaRecibe']),
