@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously, unnecessary_nullable_for_final_variable_declarations
+﻿// ignore_for_file: use_build_context_synchronously, unnecessary_nullable_for_final_variable_declarations
 
 import 'dart:typed_data';
 import 'package:cafri/helpers/upload_pdf_storage.dart';
@@ -11,18 +11,35 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'folio_service.dart';
 
+class MaterialRowData {
+  final TextEditingController material = TextEditingController();
+  final TextEditingController unidad = TextEditingController();
+  final TextEditingController cantidad = TextEditingController();
+  final TextEditingController observaciones = TextEditingController();
+
+  void dispose() {
+    material.dispose();
+    unidad.dispose();
+    cantidad.dispose();
+    observaciones.dispose();
+  }
+
+  Map<String, String> toMap() => {
+        'material': material.text,
+        'unidad': unidad.text,
+        'cantidad': cantidad.text,
+        'observaciones': observaciones.text,
+      };
+}
+
 // Modelo para una hoja/formulario individual (excepto datos de cliente)
 class HojaServicioData {
-  final TextEditingController actividadTipoTareaController =
-      TextEditingController();
-  final TextEditingController descripcionTareaController =
-      TextEditingController();
   final TextEditingController descripcionTrabajoRealizadoController =
       TextEditingController();
-  final TextEditingController materialUtilizadoController =
-      TextEditingController(); // NUEVO
+  final List<MaterialRowData> materiales = [MaterialRowData()];
   final TextEditingController observacionesController =
       TextEditingController(); // NUEVO
+  final TextEditingController areaController = TextEditingController();
   final TextEditingController descripcionVaptController =
       TextEditingController();
 
@@ -37,13 +54,27 @@ class HojaServicioData {
   final TextEditingController descripcionFinController =
       TextEditingController();
 
-  final List<Uint8List> imagenesEvaporadores = [];
-  Uint8List? imagenModeloSerieCapacidad;
+  final List<Uint8List> imagenesModeloSerieCapacidad = [];
 
   Uint8List? firmaTecnico;
   Uint8List? firmaRecibe;
   String? nombreTecnico;
   String? nombreRecibe;
+
+  // Datos del equipo (checkboxes)
+  bool sistemaHighWall = false;
+  bool sistemaPaquete = false;
+  bool sistemaFanCoil = false;
+  bool sistemaCasets = false;
+  bool sistemaCamaraFria = false;
+  bool sistemaPisoTecho = false;
+  bool sistemaManejadoraAire = false;
+  bool sistemaPaquete2 = false; // duplicado en el listado original
+
+  bool tecnologiaStandar = false;
+  bool tecnologiaInverter = false;
+  bool tecnologiaVrfVrv = false;
+  bool tecnologiaAguaHelada = false;
 
   final SignatureController firmaTecnicoController = SignatureController(
     penStrokeWidth: 3,
@@ -59,8 +90,6 @@ class HojaServicioData {
       TextEditingController();
 
   void dispose() {
-    actividadTipoTareaController.dispose();
-    descripcionTareaController.dispose();
     descripcionTrabajoRealizadoController.dispose();
     firmaTecnicoController.dispose();
     firmaRecibeController.dispose();
@@ -69,13 +98,14 @@ class HojaServicioData {
     descripcionInicioController.dispose();
     descripcionProcesoController.dispose();
     descripcionFinController.dispose();
-    materialUtilizadoController.dispose(); // NUEVO
     observacionesController.dispose(); // NUEVO
+    areaController.dispose();
+    for (final m in materiales) {
+      m.dispose();
+    }
   }
 
   void clear() {
-    actividadTipoTareaController.clear();
-    descripcionTareaController.clear();
     descripcionTrabajoRealizadoController.clear();
     firmaTecnico = null;
     firmaRecibe = null;
@@ -91,18 +121,36 @@ class HojaServicioData {
     descripcionInicioController.clear();
     descripcionProcesoController.clear();
     descripcionFinController.clear();
-    imagenesEvaporadores.clear();
-    imagenModeloSerieCapacidad = null;
-    materialUtilizadoController.clear(); // NUEVO
+    imagenesModeloSerieCapacidad.clear();
     observacionesController.clear(); // NUEVO
+    areaController.clear();
+
+    sistemaHighWall = false;
+    sistemaPaquete = false;
+    sistemaFanCoil = false;
+    sistemaCasets = false;
+    sistemaCamaraFria = false;
+    sistemaPisoTecho = false;
+    sistemaManejadoraAire = false;
+    sistemaPaquete2 = false;
+    tecnologiaStandar = false;
+    tecnologiaInverter = false;
+    tecnologiaVrfVrv = false;
+    tecnologiaAguaHelada = false;
+
+    for (final m in materiales) {
+      m.dispose();
+    }
+    materiales
+      ..clear()
+      ..add(MaterialRowData());
   }
 
   Map<String, dynamic> toMap() => {
-    'tipoTarea': actividadTipoTareaController.text,
-    'descripcionTarea': descripcionTareaController.text,
-    'imagenModeloSerieCapacidad': imagenModeloSerieCapacidad,
+    'area': areaController.text,
+    'imagenesModeloSerieCapacidad': imagenesModeloSerieCapacidad,
     'descripcionTrabajoRealizado': descripcionTrabajoRealizadoController.text,
-    'materialUtilizado': materialUtilizadoController.text, // NUEVO
+    'materiales': materiales.map((m) => m.toMap()).toList(),
     'observaciones': observacionesController.text, // NUEVO
     'fotosInicio': fotosMantenimientoInicio,
     'descripcionInicio': descripcionInicioController.text,
@@ -110,13 +158,24 @@ class HojaServicioData {
     'descripcionProceso': descripcionProcesoController.text,
     'fotosFin': fotosMantenimientoFin,
     'descripcionFin': descripcionFinController.text,
-    'imagenesEvaporadores': imagenesEvaporadores,
     'firmaTecnico': firmaTecnico,
     'nombreTecnico': nombreTecnico,
     'firmaRecibe': firmaRecibe,
     'nombreRecibe': nombreRecibe,
     'fotosVapt': fotosVapt,
     'descripcionVapt': descripcionVaptController.text,
+    'sistemaHighWall': sistemaHighWall,
+    'sistemaPaquete': sistemaPaquete,
+    'sistemaFanCoil': sistemaFanCoil,
+    'sistemaCasets': sistemaCasets,
+    'sistemaCamaraFria': sistemaCamaraFria,
+    'sistemaPisoTecho': sistemaPisoTecho,
+    'sistemaManejadoraAire': sistemaManejadoraAire,
+    'sistemaPaquete2': sistemaPaquete2,
+    'tecnologiaStandar': tecnologiaStandar,
+    'tecnologiaInverter': tecnologiaInverter,
+    'tecnologiaVrfVrv': tecnologiaVrfVrv,
+    'tecnologiaAguaHelada': tecnologiaAguaHelada,
   };
 }
 
@@ -136,18 +195,18 @@ class FormularioPDF extends StatefulWidget {
 }
 
 class _FormularioPDFState extends State<FormularioPDF> {
-  static const _colorSurface = Color(0xFFF7F9FC);
+  static const _colorSurface = Color(0xFFF3F6FB);
   static const _colorCard = Colors.white;
   static const _colorHeader = Color(0xFF0F4C81);
+  static const _colorAccent = Color(0xFF1D9A6C);
   static const double _photoThumbSize = 90;
   static const double _photoGap = 12;
 
-  // Campos de cliente (únicos)
+  // Campos de cliente (Ãºnicos)
   final TextEditingController campoNombreCliente = TextEditingController();
-  final TextEditingController atencion = TextEditingController();
   final TextEditingController responsableGlobal = TextEditingController();
 
-  // Lista dinámica de hojas (formularios)
+  // Lista dinÃ¡mica de hojas (formularios)
   final List<HojaServicioData> hojas = [HojaServicioData()];
 
   int? folioActual;
@@ -158,14 +217,14 @@ class _FormularioPDFState extends State<FormularioPDF> {
     super.initState();
     _cargarFolio();
 
-    // Prefill desde los parámetros del widget (si vienen)
+    // Prefill desde los parÃ¡metros del widget (si vienen)
     final n = widget.initialNombreCliente;
     final a = widget.initialAtencion;
     if (n != null && n.isNotEmpty) {
       campoNombreCliente.text = n;
     }
-    if (a != null && a.isNotEmpty) {
-      atencion.text = a;
+    if (a != null && a.isNotEmpty && hojas.isNotEmpty) {
+      hojas.first.areaController.text = a;
     }
   }
 
@@ -175,7 +234,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
       hoja.dispose();
     }
     campoNombreCliente.dispose();
-    atencion.dispose();
     responsableGlobal.dispose();
     super.dispose();
   }
@@ -194,10 +252,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
       final hoja = hojas[i];
       final noHoja = i + 1;
 
-      if (hoja.imagenesEvaporadores.isEmpty) {
-        return 'Hoja $noHoja: Sube al menos 1 imagen de evaporador/condensador.';
-      }
-
       if (hoja.fotosMantenimientoInicio.isEmpty) {
         return 'Hoja $noHoja: Sube al menos 1 foto de inicio.';
       }
@@ -210,9 +264,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
       if (hoja.descripcionTrabajoRealizadoController.text.trim().isEmpty) {
         return 'Hoja $noHoja: Describe el trabajo realizado.';
-      }
-      if (hoja.observacionesController.text.trim().isEmpty) {
-        return 'Hoja $noHoja: Llena las observaciones.';
       }
 
       if (hoja.firmaTecnico == null) {
@@ -242,7 +293,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
   void _limpiarFormulario() {
     campoNombreCliente.clear();
-    atencion.clear();
     responsableGlobal.clear();
     for (final hoja in hojas) {
       hoja.dispose();
@@ -250,6 +300,60 @@ class _FormularioPDFState extends State<FormularioPDF> {
     hojas
       ..clear()
       ..add(HojaServicioData());
+  }
+
+  Future<void> _agregarHoja() async {
+    final nueva = HojaServicioData();
+    final base = hojas.isNotEmpty ? hojas.last : null;
+
+    if (base != null && base.areaController.text.trim().isNotEmpty) {
+      nueva.areaController.text = base.areaController.text;
+    }
+
+    if (base != null &&
+        (base.firmaTecnico != null || base.firmaRecibe != null)) {
+      final usarMismas = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('¿Usar las mismas firmas?'),
+          content: const Text(
+            'Se detectaron firmas en la hoja anterior. ¿Quieres reutilizarlas en la nueva hoja?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Nuevas'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Usar mismas'),
+            ),
+          ],
+        ),
+      );
+
+      if (usarMismas == null) return;
+      if (usarMismas) {
+        nueva.firmaTecnico = base.firmaTecnico;
+        nueva.nombreTecnico = base.nombreTecnico;
+        nueva.firmaRecibe = base.firmaRecibe;
+        nueva.nombreRecibe = base.nombreRecibe;
+        if (base.nombreTecnico != null) {
+          nueva.nombreTecnicoDialogController.text = base.nombreTecnico!;
+        }
+        if (base.nombreRecibe != null) {
+          nueva.nombreRecibeDialogController.text = base.nombreRecibe!;
+        }
+      }
+    }
+
+    setState(() {
+      hojas.add(nueva);
+    });
   }
 
   Widget _hojasWidget() {
@@ -275,7 +379,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                         'Hoja ${idx + 1}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 17,
                         ),
                       ),
                       const Spacer(),
@@ -293,14 +397,21 @@ class _FormularioPDFState extends State<FormularioPDF> {
                   ),
                   // Actividades
                   // Imagen modelo, serie y capacidad
+                  _seccionFormulario(
+                    titulo: 'Área',
+                    icon: Icons.place_outlined,
+                    child: TextField(
+                      controller: hoja.areaController,
+                      decoration: _inputDecoration('Área'),
+                    ),
+                  ),
+                  _datosEquipoWidget(hoja),
+                  const SizedBox(height: 8),
                   _modeloSerieCapacidadImagenWidget(hoja),
                   const SizedBox(height: 8),
-                  // Imágenes de evaporadores
-                  _imagenesEvaporadoresWidget(hoja),
-                  const SizedBox(height: 8),
-
                   FotosFilaDescripcion(
-                    titulo: 'VOLTAJES, AMPERAJES, PRESIONES Y TEMPERATURAS',
+                    titulo: '4. VOLTAJES, AMPERAJES, PRESIONES Y TEMPERATURAS',
+                    icon: Icons.electrical_services_outlined,
                     fotos: hoja.fotosVapt,
                     descripcionController: hoja.descripcionVaptController,
                     onAdd: (img) => setState(() => hoja.fotosVapt.add(img)),
@@ -311,7 +422,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
                   // Fotos inicio/proceso/fin (nuevo widget)
                   FotosFilaDescripcion(
-                    titulo: 'Fotos de inicio',
+                    titulo: '5. Fotos de inicio',
+                    icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoInicio,
                     descripcionController: hoja.descripcionInicioController,
                     onAdd: (img) =>
@@ -321,7 +433,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     ),
                   ),
                   FotosFilaDescripcion(
-                    titulo: 'Fotos de proceso',
+                    titulo: '6. Fotos de proceso',
+                    icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoProceso,
                     descripcionController: hoja.descripcionProcesoController,
                     onAdd: (img) =>
@@ -331,7 +444,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     ),
                   ),
                   FotosFilaDescripcion(
-                    titulo: 'Fotos de fin',
+                    titulo: '7. Fotos de fin',
+                    icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoFin,
                     descripcionController: hoja.descripcionFinController,
                     onAdd: (img) =>
@@ -340,20 +454,22 @@ class _FormularioPDFState extends State<FormularioPDF> {
                       () => hoja.fotosMantenimientoFin.removeAt(idx),
                     ),
                   ),
-                  // Descripción trabajo realizado
-                  TextField(
-                    controller: hoja.descripcionTrabajoRealizadoController,
-                    decoration: _inputDecoration(
-                      'Descripción del trabajo realizado',
+                  _seccionFormulario(
+                    titulo: '6. Descripción del trabajo',
+                    icon: Icons.description_outlined,
+                    child: TextField(
+                      controller: hoja.descripcionTrabajoRealizadoController,
+                      decoration: _inputDecoration(
+                        'Describe el trabajo realizado',
+                      ),
+                      maxLines: 3,
                     ),
-                    maxLines: 3,
                   ),
                   const SizedBox(height: 8),
-                  // NUEVO: Material utilizado
-                  TextField(
-                    controller: hoja.materialUtilizadoController,
-                    decoration: _inputDecoration('Material utilizado'),
-                    maxLines: 2,
+                  _seccionFormulario(
+                    titulo: '5. materiales utilizados',
+                    icon: Icons.inventory_2_outlined,
+                    child: _materialesWidget(hoja),
                   ),
                   const SizedBox(height: 8),
                   // NUEVO: Observaciones
@@ -363,41 +479,44 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     maxLines: 2,
                   ),
                   const SizedBox(height: 12),
-                  // Firmas
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _firmaWidget(
-                          titulo: 'Firma del técnico',
-                          firma: hoja.firmaTecnico,
-                          nombre: hoja.nombreTecnico,
-                          onFirmar: () => _firmar(
-                            hoja.firmaTecnicoController,
-                            'Firma del técnico',
-                            hoja.nombreTecnicoDialogController,
-                            true,
-                            hoja,
+                  _seccionFormulario(
+                    titulo: '7. Firmas',
+                    icon: Icons.draw_outlined,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _firmaWidget(
+                            titulo: 'Firma del técnico',
+                            firma: hoja.firmaTecnico,
+                            nombre: hoja.nombreTecnico,
+                            onFirmar: () => _firmar(
+                              hoja.firmaTecnicoController,
+                              'Firma del técnico',
+                              hoja.nombreTecnicoDialogController,
+                              true,
+                              hoja,
+                            ),
+                            onEliminar: () => _eliminarFirma(true, hoja),
                           ),
-                          onEliminar: () => _eliminarFirma(true, hoja),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _firmaWidget(
-                          titulo: 'Firma de quien recibe',
-                          firma: hoja.firmaRecibe,
-                          nombre: hoja.nombreRecibe,
-                          onFirmar: () => _firmar(
-                            hoja.firmaRecibeController,
-                            'Firma de quien recibe',
-                            hoja.nombreRecibeDialogController,
-                            false,
-                            hoja,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _firmaWidget(
+                            titulo: 'Firma de quien recibe',
+                            firma: hoja.firmaRecibe,
+                            nombre: hoja.nombreRecibe,
+                            onFirmar: () => _firmar(
+                              hoja.firmaRecibeController,
+                              'Firma de quien recibe',
+                              hoja.nombreRecibeDialogController,
+                              false,
+                              hoja,
+                            ),
+                            onEliminar: () => _eliminarFirma(false, hoja),
                           ),
-                          onEliminar: () => _eliminarFirma(false, hoja),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -409,11 +528,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
           child: OutlinedButton.icon(
             icon: const Icon(Icons.add_circle_outline),
             label: const Text('Agregar otra hoja'),
-            onPressed: () {
-              setState(() {
-                hojas.add(HojaServicioData());
-              });
-            },
+            onPressed: _agregarHoja,
           ),
         ),
       ],
@@ -424,82 +539,16 @@ class _FormularioPDFState extends State<FormularioPDF> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _tituloBloque('MODELO, SERIE, CAPACIDAD DE CONDENSADORES'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: _photoGap,
-          runSpacing: _photoGap,
-          children: [
-            if (hoja.imagenModeloSerieCapacidad != null)
-              Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      hoja.imagenModeloSerieCapacidad!,
-                      width: _photoThumbSize,
-                      height: _photoThumbSize,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                    onPressed: () {
-                      setState(() {
-                        hoja.imagenModeloSerieCapacidad = null;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            GestureDetector(
-              onTap: () async {
-                final picker = ImagePicker();
-                final XFile? picked = await picker.pickImage(
-                  source: ImageSource.gallery,
-                  maxWidth: 1280,
-                  maxHeight: 1280,
-                  imageQuality: 75,
-                );
-                if (picked == null) return;
-                final bytes = await picked.readAsBytes();
-                setState(() {
-                  hoja.imagenModeloSerieCapacidad = bytes;
-                });
-              },
-              child: Container(
-                width: _photoThumbSize,
-                height: _photoThumbSize,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey),
-                ),
-                child: const Icon(
-                  Icons.add_a_photo,
-                  size: 32,
-                  color: Colors.grey,
-                ),
-              ),
-            ),
-          ],
+        _tituloBloque(
+          '2. MODELO, SERIE, CAPACIDAD DE CONDENSADOR Y CAPACITOR',
+          icon: Icons.confirmation_number_outlined,
         ),
-      ],
-    );
-  }
-
-  Widget _imagenesEvaporadoresWidget(HojaServicioData hoja) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _tituloBloque('Imágenes de los evaporadores/condensadores'),
         const SizedBox(height: 8),
         Wrap(
           spacing: _photoGap,
           runSpacing: _photoGap,
           children: [
-            ...hoja.imagenesEvaporadores.map(
+            ...hoja.imagenesModeloSerieCapacidad.map(
               (imgBytes) => Stack(
                 alignment: Alignment.topRight,
                 children: [
@@ -516,7 +565,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
                     onPressed: () {
                       setState(() {
-                        hoja.imagenesEvaporadores.remove(imgBytes);
+                        hoja.imagenesModeloSerieCapacidad.remove(imgBytes);
                       });
                     },
                   ),
@@ -536,7 +585,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     pickedList.map((xfile) => xfile.readAsBytes()),
                   );
                   setState(() {
-                    hoja.imagenesEvaporadores.addAll(bytesList);
+                    hoja.imagenesModeloSerieCapacidad.addAll(bytesList);
                   });
                 }
               },
@@ -558,6 +607,254 @@ class _FormularioPDFState extends State<FormularioPDF> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _datosEquipoWidget(HojaServicioData hoja) {
+    Widget checkboxItem(String label, bool value, void Function(bool?) onChanged) {
+      return SizedBox(
+        width: 170,
+        child: Row(
+          children: [
+            Checkbox(value: value, onChanged: onChanged),
+            Expanded(child: Text(label)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _tituloBloque('1. DATOS DEL EQUIPO', icon: Icons.settings_outlined),
+        const SizedBox(height: 8),
+        const Text(
+          'Tipo de sistema',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            checkboxItem(
+              'High Wall',
+              hoja.sistemaHighWall,
+              (v) => setState(() => hoja.sistemaHighWall = v ?? false),
+            ),
+            checkboxItem(
+              'Paquete',
+              hoja.sistemaPaquete,
+              (v) => setState(() => hoja.sistemaPaquete = v ?? false),
+            ),
+            checkboxItem(
+              'Fan & Coil',
+              hoja.sistemaFanCoil,
+              (v) => setState(() => hoja.sistemaFanCoil = v ?? false),
+            ),
+            checkboxItem(
+              'Casets',
+              hoja.sistemaCasets,
+              (v) => setState(() => hoja.sistemaCasets = v ?? false),
+            ),
+            checkboxItem(
+              'Cámara fría',
+              hoja.sistemaCamaraFria,
+              (v) => setState(() => hoja.sistemaCamaraFria = v ?? false),
+            ),
+            checkboxItem(
+              'Piso-Techo',
+              hoja.sistemaPisoTecho,
+              (v) => setState(() => hoja.sistemaPisoTecho = v ?? false),
+            ),
+            checkboxItem(
+              'Manejadora de Aire',
+              hoja.sistemaManejadoraAire,
+              (v) => setState(() => hoja.sistemaManejadoraAire = v ?? false),
+            ),
+            checkboxItem(
+              'Paquete',
+              hoja.sistemaPaquete2,
+              (v) => setState(() => hoja.sistemaPaquete2 = v ?? false),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Tecnologí­a',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            checkboxItem(
+              'Standar',
+              hoja.tecnologiaStandar,
+              (v) => setState(() => hoja.tecnologiaStandar = v ?? false),
+            ),
+            checkboxItem(
+              'Inverter',
+              hoja.tecnologiaInverter,
+              (v) => setState(() => hoja.tecnologiaInverter = v ?? false),
+            ),
+            checkboxItem(
+              'VRF/VRV',
+              hoja.tecnologiaVrfVrv,
+              (v) => setState(() => hoja.tecnologiaVrfVrv = v ?? false),
+            ),
+            checkboxItem(
+              'Agua Helada',
+              hoja.tecnologiaAguaHelada,
+              (v) => setState(() => hoja.tecnologiaAguaHelada = v ?? false),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _materialesWidget(HojaServicioData hoja) {
+    InputDecoration denseInput(String hint) => InputDecoration(
+      hintText: hint,
+      isDense: false,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      filled: true,
+      fillColor: const Color(0xFFF8FAFD),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Colors.black12),
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const minWidth = 860.0;
+        final tableWidth = constraints.maxWidth < minWidth
+            ? minWidth
+            : constraints.maxWidth;
+        return Column(
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: tableWidth,
+                child: Column(
+                  children: [
+                    Row(
+                      children: const [
+                        Expanded(
+                          flex: 4,
+                          child: Text(
+                            'Material',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: 14),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Unidad',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: 14),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            'Cantidad',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: 14),
+                        Expanded(
+                          flex: 4,
+                          child: Text(
+                            'Observaciones',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: 36),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...hoja.materiales.asMap().entries.map((e) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 4,
+                              child: TextField(
+                                controller: e.value.material,
+                                decoration: denseInput('Material o insumo'),
+                                minLines: 1,
+                                maxLines: 2,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: e.value.unidad,
+                                decoration: denseInput('Unidad'),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: e.value.cantidad,
+                                decoration: denseInput('Cantidad'),
+                                keyboardType: TextInputType.number,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              flex: 4,
+                              child: TextField(
+                                controller: e.value.observaciones,
+                                decoration: denseInput('Observaciones'),
+                                minLines: 1,
+                                maxLines: 2,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              padding: const EdgeInsets.only(left: 4, right: 4, top: 6),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              onPressed: () {
+                                setState(() {
+                                  if (hoja.materiales.length > 1) {
+                                    final row = hoja.materiales.removeAt(e.key);
+                                    row.dispose();
+                                  }
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () =>
+                    setState(() => hoja.materiales.add(MaterialRowData())),
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('Agregar material'),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -617,32 +914,40 @@ class _FormularioPDFState extends State<FormularioPDF> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              scrollable: true,
               title: Text(titulo),
-              content: SizedBox(
-                width: MediaQuery.of(context).size.width * 0.8,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nombreController,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 200,
-                      child: Signature(
-                        controller: controller,
-                        backgroundColor: Colors.white,
+              content: AnimatedPadding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                duration: const Duration(milliseconds: 150),
+                curve: Curves.easeOut,
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width * 0.8,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nombreController,
+                        decoration: const InputDecoration(labelText: 'Nombre'),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 200,
+                        child: Signature(
+                          controller: controller,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
                 TextButton(
                   onPressed: () {
                     controller.clear();
-                    setDialogState(() {}); // refresca el diálogo
+                    setDialogState(() {}); // refresca el diÃ¡logo
                   },
                   child: const Text('Limpiar'),
                 ),
@@ -687,6 +992,19 @@ class _FormularioPDFState extends State<FormularioPDF> {
           hoja.firmaRecibe = result['firma'];
           hoja.nombreRecibe = result['nombre'];
         }
+
+        for (final h in hojas) {
+          if (h == hoja) continue;
+          if (esTecnico && h.firmaTecnico == null) {
+            h.firmaTecnico = result['firma'];
+            h.nombreTecnico = result['nombre'];
+            h.nombreTecnicoDialogController.text = result['nombre'];
+          } else if (!esTecnico && h.firmaRecibe == null) {
+            h.firmaRecibe = result['firma'];
+            h.nombreRecibe = result['nombre'];
+            h.nombreRecibeDialogController.text = result['nombre'];
+          }
+        }
       });
     }
   }
@@ -709,17 +1027,20 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
   Widget _encabezadoCafri() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
       decoration: BoxDecoration(
-        color: _colorCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.black12),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F4C81), Color(0xFF155D9A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Color(0x220F4C81),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -743,6 +1064,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                 Text(
                   'HOJA DE SERVICIO',
                   style: TextStyle(
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
                     letterSpacing: 1.2,
@@ -751,14 +1073,22 @@ class _FormularioPDFState extends State<FormularioPDF> {
                 SizedBox(height: 4),
                 Text(
                   'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  style: TextStyle(
+                    color: Color(0xFFEAF2FF),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 SizedBox(height: 4),
-                Text('Teléfono: (999) 102 1232'),
-                Text('Número de identificación empresarial: AAF2306305G0'),
-                Text('Email: contacto@cafrimx.com'),
+                Text('Teléfono: (999) 102 1232', style: TextStyle(color: Color(0xFFEAF2FF))),
+                Text(
+                  'Número de identificación empresarial: AAF2306305G0',
+                  style: TextStyle(color: Color(0xFFEAF2FF)),
+                ),
+                Text('Email: contacto@cafrimx.com', style: TextStyle(color: Color(0xFFEAF2FF))),
                 Text(
                   'Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230',
+                  style: TextStyle(color: Color(0xFFEAF2FF)),
                 ),
               ],
             ),
@@ -770,16 +1100,16 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
   Widget _seccionConTitulo(String titulo, Widget child) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: _colorCard,
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD5DFEC)),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Color(0x100F172A),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
       ),
@@ -787,7 +1117,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
             decoration: const BoxDecoration(
               color: _colorHeader,
               borderRadius: BorderRadius.only(
@@ -795,19 +1125,75 @@ class _FormularioPDFState extends State<FormularioPDF> {
                 topRight: Radius.circular(8),
               ),
             ),
-            child: Center(
-              child: Text(
-                titulo,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: Colors.white,
+            child: Row(
+              children: [
+                Text(
+                  titulo.toUpperCase(),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: Colors.white,
+                  ),
                 ),
-                textAlign: TextAlign.center,
-              ),
+              ],
             ),
           ),
-          Padding(padding: const EdgeInsets.all(12.0), child: child),
+          Padding(padding: const EdgeInsets.all(14.0), child: child),
+        ],
+      ),
+    );
+  }
+
+  Widget _seccionFormulario({
+    required String titulo,
+    required Widget child,
+    IconData? icon,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: _colorCard,
+        border: Border.all(color: const Color(0xFFD5DFEC)),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x100F172A),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: const BoxDecoration(
+              color: _colorHeader,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(padding: const EdgeInsets.all(14.0), child: child),
         ],
       ),
     );
@@ -827,7 +1213,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
     );
   }
 
-  Widget _tituloBloque(String titulo) {
+  Widget _tituloBloque(String titulo, {IconData? icon}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -835,14 +1221,25 @@ class _FormularioPDFState extends State<FormularioPDF> {
         color: _colorHeader,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        titulo,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
-        ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              titulo.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -869,8 +1266,15 @@ class _FormularioPDFState extends State<FormularioPDF> {
         backgroundColor: _colorHeader,
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+      body: AnimatedPadding(
+        padding: EdgeInsets.only(
+          left: 16.0,
+          right: 16.0,
+          top: 16.0,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16.0,
+        ),
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
         child: SingleChildScrollView(
           child: Center(
             child: ConstrainedBox(
@@ -886,8 +1290,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     ),
                     decoration: BoxDecoration(
                       color: _colorCard,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.black12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFD5DFEC)),
                     ),
                     child: Row(
                       children: [
@@ -914,11 +1318,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     controller: responsableGlobal,
                     decoration: _inputDecoration('Nombre del responsable'),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: atencion,
-                    decoration: _inputDecoration('Atención'),
-                  ),
                   const SizedBox(height: 16),
                   _seccionConTitulo('Hojas de servicio', _hojasWidget()),
                   const SizedBox(height: 20),
@@ -928,7 +1327,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                       icon: const Icon(Icons.picture_as_pdf),
                       label: const Text('Guardar como PDF'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _colorHeader,
+                        backgroundColor: _colorAccent,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -942,10 +1341,10 @@ class _FormularioPDFState extends State<FormularioPDF> {
                           ScaffoldMessenger.of(
                             context,
                           ).showSnackBar(SnackBar(content: Text(error)));
-                          return; // Detén el flujo si faltan campos
+                          return; // DetÃ©n el flujo si faltan campos
                         }
 
-                        // 2. Ahora sí, pide confirmación
+                        // 2. Ahora sÃ­, pide confirmaciÃ³n
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (context) => AlertDialog(
@@ -962,7 +1361,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                               ElevatedButton(
                                 onPressed: () =>
                                     Navigator.of(context).pop(true),
-                                child: const Text('Sí, continuar'),
+                                child: const Text('Sí­, continuar'),
                               ),
                             ],
                           ),
@@ -1006,7 +1405,6 @@ class _FormularioPDFState extends State<FormularioPDF> {
                             folio: folioParaPDF,
                             nombreCliente: campoNombreCliente.text,
                             responsable: responsableGlobal.text,
-                            atencion: atencion.text,
                             hojas: hojasList,
                             fechaFormateada: fechaFormateada,
                             logoBytes: logoUint8List,
@@ -1014,7 +1412,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
 
                           // Validar que el PDF se generó correctamente
                           if (pdfBytes.isEmpty) {
-                            throw Exception('El PDF generado está vacío');
+                            throw Exception('El PDF generado está vací­o');
                           }
 
                           try {
@@ -1029,7 +1427,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                             if (mounted) {
                               Navigator.of(
                                 context,
-                              ).pop(); // Cerrar diálogo de progreso
+                              ).pop(); // Cerrar diÃ¡logo de progreso
                             }
 
                             if (!mounted) return;
@@ -1043,13 +1441,13 @@ class _FormularioPDFState extends State<FormularioPDF> {
                             return;
                           }
 
-                          // Si llegamos aquí, la subida fue exitosa
+                          // Si llegamos aquÃ­, la subida fue exitosa
                           await FolioService.updateFolio(folioParaPDF);
 
                           if (mounted) {
                             Navigator.of(
                               context,
-                            ).pop(); // Cerrar diálogo de progreso
+                            ).pop(); // Cerrar diÃ¡logo de progreso
                           }
 
                           if (!mounted) return;
@@ -1076,7 +1474,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                           if (mounted) {
                             Navigator.of(
                               context,
-                            ).pop(); // Cerrar diálogo de progreso
+                            ).pop(); // Cerrar diÃ¡logo de progreso
                           }
 
                           if (!mounted) return;
@@ -1101,13 +1499,14 @@ class _FormularioPDFState extends State<FormularioPDF> {
   }
 }
 
-// Widget para lista de fotos en fila y una sola descripción
+// Widget para lista de fotos en fila y una sola Descripción
 class FotosFilaDescripcion extends StatefulWidget {
   final String titulo;
   final List<Uint8List> fotos;
   final TextEditingController descripcionController;
   final void Function(Uint8List) onAdd;
   final void Function(int) onRemove;
+  final IconData? icon;
 
   const FotosFilaDescripcion({
     super.key,
@@ -1116,6 +1515,7 @@ class FotosFilaDescripcion extends StatefulWidget {
     required this.descripcionController,
     required this.onAdd,
     required this.onRemove,
+    this.icon,
   });
 
   @override
@@ -1157,14 +1557,25 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
             color: _titleBg,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            widget.titulo,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(widget.icon, color: Colors.white, size: 16),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  widget.titulo.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -1236,7 +1647,7 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
   }
 }
 
-// Generador de PDF multipágina
+// Generador de PDF multipÃ¡gina
 class PdfGenerator {
   static const double _pdfModelImageSize = 90;
   static const double _pdfPhotoSize = _pdfModelImageSize;
@@ -1246,22 +1657,33 @@ class PdfGenerator {
     required int folio,
     required String nombreCliente,
     required String responsable,
-    required String atencion,
     required List<Map<String, dynamic>> hojas,
     required String fechaFormateada,
     required Uint8List logoBytes,
   }) async {
-    final pdf = pw.Document();
+    final fontData = await rootBundle.load(
+      'packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf',
+    );
+    final baseFont = pw.Font.ttf(fontData);
+    final theme = pw.ThemeData.withFont(
+      base: baseFont,
+      bold: baseFont,
+    );
+    final pdf = pw.Document(theme: theme);
+    final headerColor = ppdf.PdfColor.fromInt(0xFF0F4C81);
+    final borderColor = ppdf.PdfColor.fromInt(0xFFD5DFEC);
+    final lightBg = ppdf.PdfColor.fromInt(0xFFF8FAFD);
 
     pw.Widget buildPdfTitulo(String titulo) {
       return pw.Container(
         width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: pw.BoxDecoration(
-          color: ppdf.PdfColor.fromInt(0xFF0F4C81),
+          color: headerColor,
+          borderRadius: pw.BorderRadius.circular(6),
         ),
         child: pw.Text(
-          titulo,
+          titulo.toUpperCase(),
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(
             color: ppdf.PdfColor.fromInt(0xFFFFFFFF),
@@ -1272,15 +1694,34 @@ class PdfGenerator {
       );
     }
 
+    pw.Widget buildCardSection(String titulo, List<pw.Widget> children) {
+      return pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: borderColor),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
+        child: pw.Padding(
+          padding: const pw.EdgeInsets.all(8),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              buildPdfTitulo(titulo),
+              pw.SizedBox(height: 6),
+              ...children,
+            ],
+          ),
+        ),
+      );
+    }
+
     pw.Widget buildFotoFila(List fotos, String descripcion, String titulo) {
       if (fotos.isEmpty) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            buildPdfTitulo(titulo),
-            pw.SizedBox(height: 4),
+        return buildCardSection(
+          titulo,
+          [
             pw.Text('No hay fotos agregadas.'),
-            pw.SizedBox(height: 8),
+            if (descripcion.isNotEmpty) pw.SizedBox(height: 4),
             if (descripcion.isNotEmpty)
               pw.Text(
                 descripcion,
@@ -1289,11 +1730,9 @@ class PdfGenerator {
           ],
         );
       }
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          buildPdfTitulo(titulo),
-          pw.SizedBox(height: 4),
+      return buildCardSection(
+        titulo,
+        [
           pw.Wrap(
             spacing: _pdfPhotoGap,
             runSpacing: _pdfPhotoGap,
@@ -1312,37 +1751,52 @@ class PdfGenerator {
               );
             }).toList(),
           ),
-          pw.SizedBox(height: 4),
+          if (descripcion.isNotEmpty) pw.SizedBox(height: 4),
           if (descripcion.isNotEmpty)
             pw.Text(
               descripcion,
               style: pw.TextStyle(fontSize: 10),
             ),
-          pw.SizedBox(height: 8),
         ],
       );
     }
 
-    pw.Widget buildImagenesEvaporadores(List imagenes) {
-      if (imagenes.isEmpty) {
-        return pw.Text('No hay imágenes agregadas.');
-      }
-      return pw.Wrap(
-        spacing: _pdfPhotoGap,
-        runSpacing: _pdfPhotoGap,
-        children: imagenes
-            .map<pw.Widget>(
-              (imgBytes) => pw.ClipRRect(
-                horizontalRadius: 6,
-                verticalRadius: 6,
-                child: pw.Container(
-                  width: _pdfPhotoSize,
-                  height: _pdfPhotoSize,
-                  child: pw.Image(
-                    pw.MemoryImage(imgBytes),
-                    fit: pw.BoxFit.cover,
-                  ),
-                ),
+    pw.Widget buildCheckboxItem(String label, bool checked, {double width = 160}) {
+      return pw.Container(
+        width: width,
+        padding: const pw.EdgeInsets.only(bottom: 4),
+        child: pw.Row(
+          children: [
+            pw.Container(
+              width: 10,
+              height: 10,
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: ppdf.PdfColors.black),
+              ),
+              child: checked
+                  ? pw.Center(
+                      child: pw.Text(
+                        'X',
+                        style: pw.TextStyle(fontSize: 8),
+                      ),
+                    )
+                  : pw.SizedBox(),
+            ),
+            pw.SizedBox(width: 6),
+            pw.Expanded(child: pw.Text(label, style: pw.TextStyle(fontSize: 10))),
+          ],
+        ),
+      );
+    }
+
+    pw.TableRow buildHeaderRow(List<String> headers) {
+      return pw.TableRow(
+        decoration: pw.BoxDecoration(color: lightBg),
+        children: headers
+            .map(
+              (h) => pw.Padding(
+                padding: const pw.EdgeInsets.all(4),
+                child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ),
             )
             .toList(),
@@ -1358,8 +1812,9 @@ class PdfGenerator {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Container(
-                width: 70,
-                height: 70,
+                width: 62,
+                height: 62,
+                padding: const pw.EdgeInsets.only(top: 6),
                 child: pw.Image(
                   pw.MemoryImage(logo),
                   fit: pw.BoxFit.contain,
@@ -1373,19 +1828,19 @@ class PdfGenerator {
                     pw.Text(
                       'HOJA DE SERVICIO',
                       style: pw.TextStyle(
-                        fontSize: 16,
+                        fontSize: 17,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                     pw.SizedBox(height: 2),
                     pw.Text(
                       'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                      style: const pw.TextStyle(fontSize: 10),
+                      style: const pw.TextStyle(fontSize: 9.5),
                     ),
-                    pw.Text('Teléfono: (999) 102 1232', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('Número de identificación empresarial: AAF2306305G0', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('Email: contacto@cafrimx.com', style: const pw.TextStyle(fontSize: 9)),
-                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text('Teléfono: (999) 102 1232', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Número de identificación empresarial: AAF2306305G0', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Email: contacto@cafrimx.com', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230', style: const pw.TextStyle(fontSize: 8.5)),
                   ],
                 ),
               ),
@@ -1393,9 +1848,9 @@ class PdfGenerator {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Fecha: $fecha', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Folio (Tarea): $folio', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Cliente: $cliente', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Fecha: $fecha', style: const pw.TextStyle(fontSize: 9)),
+                  pw.Text('Folio (Tarea): $folio', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Cliente: $cliente', style: const pw.TextStyle(fontSize: 9)),
                 ],
               ),
             ],
@@ -1414,7 +1869,7 @@ class PdfGenerator {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                'CAFMI — confidencial',
+                'CAFRI confidencial',
                 style: const pw.TextStyle(fontSize: 9, color: ppdf.PdfColor.fromInt(0xFF777777)),
               ),
               pw.Text(
@@ -1434,117 +1889,194 @@ class PdfGenerator {
           header: (context) => buildPdfHeader(logoBytes, fechaFormateada, folio, nombreCliente),
           footer: (context) => buildPdfFooter(context),
           build: (context) => [
-            pw.SizedBox(height: 4),
-
-            buildPdfTitulo('Información del cliente'),
-            pw.Text('Nombre del cliente: $nombreCliente'),
-            pw.Text('Nombre del responsable: $responsable'),
-            pw.Text('Atención: $atencion'),
-            pw.SizedBox(height: 8),
-
-            buildPdfTitulo('Información de las actividades'),
-            pw.Text('Tipo de tarea: ${hoja['tipoTarea'] ?? ''}'),
-            pw.Text(
-              'Descripción de la tarea: ${hoja['descripcionTarea'] ?? ''}',
+            buildCardSection(
+              'Información del cliente',
+              [
+                pw.Text('Nombre del cliente: $nombreCliente'),
+                pw.Text('Nombre del responsable: $responsable'),
+                pw.Text('Área: ${hoja['Área'] ?? ''}'),
+              ],
             ),
-            pw.SizedBox(height: 8),
 
-            buildPdfTitulo('MODELO, SERIE, CAPACIDAD DE CONDENSADORES'),
-            pw.SizedBox(height: 4),
-            if (hoja['imagenModeloSerieCapacidad'] != null)
-              pw.ClipRRect(
-                horizontalRadius: 6,
-                verticalRadius: 6,
-                child: pw.Image(
-                  pw.MemoryImage(hoja['imagenModeloSerieCapacidad']),
-                  width: _pdfModelImageSize,
-                  height: _pdfModelImageSize,
-                  fit: pw.BoxFit.cover,
+            buildCardSection(
+              'DATOS DEL EQUIPO',
+              [
+                pw.Text('Tipo de sistema:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  children: [
+                    buildCheckboxItem('High Wall', hoja['sistemaHighWall'] == true),
+                    buildCheckboxItem('Paquete', hoja['sistemaPaquete'] == true),
+                    buildCheckboxItem('Fan & Coil', hoja['sistemaFanCoil'] == true),
+                    buildCheckboxItem('Casets', hoja['sistemaCasets'] == true),
+                    buildCheckboxItem('Cámara fría', hoja['sistemaCamaraFria'] == true),
+                    buildCheckboxItem('Piso-Techo', hoja['sistemaPisoTecho'] == true),
+                    buildCheckboxItem('Manejadora de Aire', hoja['sistemaManejadoraAire'] == true, width: 200),
+                    buildCheckboxItem('Paquete', hoja['sistemaPaquete2'] == true),
+                  ],
                 ),
-              )
-            else
-              pw.Text('No hay imagen agregada.'),
-            pw.SizedBox(height: 8),
+                pw.SizedBox(height: 6),
+                pw.Text('Tecnología:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  children: [
+                    buildCheckboxItem('Standar', hoja['tecnologiaStandar'] == true),
+                    buildCheckboxItem('Inverter', hoja['tecnologiaInverter'] == true),
+                    buildCheckboxItem('VRF/VRV', hoja['tecnologiaVrfVrv'] == true),
+                    buildCheckboxItem('Agua Helada', hoja['tecnologiaAguaHelada'] == true),
+                  ],
+                ),
+              ],
+            ),
 
-            buildPdfTitulo('Imágenes de los evaporadores/condensadores'),
-            buildImagenesEvaporadores(hoja['imagenesEvaporadores'] ?? []),
-            pw.SizedBox(height: 8),
+            buildCardSection(
+              'MODELO, SERIE, CAPACIDAD DE CONDENSADOR Y CAPACITOR',
+              [
+                if ((hoja['imagenesModeloSerieCapacidad'] ?? []).isNotEmpty)
+                  pw.Wrap(
+                    spacing: _pdfPhotoGap,
+                    runSpacing: _pdfPhotoGap,
+                    children: (hoja['imagenesModeloSerieCapacidad'] as List)
+                        .map<pw.Widget>(
+                          (imgBytes) => pw.ClipRRect(
+                            horizontalRadius: 6,
+                            verticalRadius: 6,
+                            child: pw.Image(
+                              pw.MemoryImage(imgBytes),
+                              width: _pdfModelImageSize,
+                              height: _pdfModelImageSize,
+                              fit: pw.BoxFit.cover,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  )
+                else
+                  pw.Text('No hay imagen agregada.'),
+              ],
+            ),
 
             buildFotoFila(
               (hoja['fotosVapt'] ?? []) as List,
               hoja['descripcionVapt'] ?? '',
               'VOLTAJES, AMPERAJES, PRESIONES Y TEMPERATURAS (fotos)',
             ),
-            pw.SizedBox(height: 8),
 
             buildFotoFila(
               (hoja['fotosInicio'] ?? []) as List,
               hoja['descripcionInicio'] ?? '',
               'Fotos de inicio del servicio',
             ),
-            pw.SizedBox(height: 20),
             buildFotoFila(
               (hoja['fotosProceso'] ?? []) as List,
               hoja['descripcionProceso'] ?? '',
               'Fotos de proceso del servicio',
             ),
-            pw.SizedBox(height: 20),
             buildFotoFila(
               (hoja['fotosFin'] ?? []) as List,
               hoja['descripcionFin'] ?? '',
               'Fotos de fin del servicio',
             ),
-            pw.SizedBox(height: 20),
 
-            buildPdfTitulo('Descripción del trabajo realizado'),
-            pw.Text(hoja['descripcionTrabajoRealizado'] ?? ''),
-            pw.SizedBox(height: 12),
+            buildCardSection(
+              'Descripción del trabajo realizado',
+              [
+                pw.Text(hoja['descripcionTrabajoRealizado'] ?? ''),
+              ],
+            ),
 
-            // NUEVOS APARTADOS
-            buildPdfTitulo('Material utilizado'),
-            pw.Text(hoja['materialUtilizado'] ?? ''),
-            pw.SizedBox(height: 12),
-
-            buildPdfTitulo('Observaciones'),
-            pw.Text(hoja['observaciones'] ?? ''),
-            pw.SizedBox(height: 12),
-
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
-              children: [
-                pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+            buildCardSection(
+              'materiales utilizados',
+              [
+                if ((hoja['materiales'] ?? []).isEmpty)
+                  pw.Text('Sin materiales')
+                else
+                  pw.Table(
+                    border: pw.TableBorder.all(color: ppdf.PdfColors.grey400),
                     children: [
-                      buildPdfTitulo('Firma del técnico'),
-                      if (hoja['firmaTecnico'] != null)
-                        pw.Image(
-                          pw.MemoryImage(hoja['firmaTecnico']),
-                          height: 100,
-                        ),
-                      if (hoja['nombreTecnico'] != null)
-                        pw.Text(hoja['nombreTecnico']),
+                      buildHeaderRow(['Material', 'Unidad', 'Cantidad', 'Observaciones']),
+                      ...(hoja['materiales'] as List).map(
+                        (m) {
+                          final row = Map<String, dynamic>.from(m as Map);
+                          return pw.TableRow(
+                            children: [
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.all(4),
+                                child: pw.Text(row['material'] ?? ''),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.all(4),
+                                child: pw.Text(row['unidad'] ?? ''),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.all(4),
+                                child: pw.Text(row['cantidad'] ?? ''),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.all(4),
+                                child: pw.Text(row['observaciones'] ?? ''),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
-                ),
-                pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
-                    children: [
-                      buildPdfTitulo('Firma de quien recibe'),
-                      if (hoja['firmaRecibe'] != null)
-                        pw.Image(
-                          pw.MemoryImage(hoja['firmaRecibe']),
-                          height: 100,
-                        ),
-                      if (hoja['nombreRecibe'] != null)
-                        pw.Text(hoja['nombreRecibe']),
-                    ],
-                  ),
+              ],
+            ),
+
+            buildCardSection(
+              'Observaciones',
+              [
+                pw.Text(hoja['observaciones'] ?? ''),
+              ],
+            ),
+
+            buildCardSection(
+              'Firmas',
+              [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
+                  children: [
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.center,
+                        children: [
+                          pw.Text('Firma del técnico', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                          if (hoja['firmaTecnico'] != null)
+                            pw.Image(
+                              pw.MemoryImage(hoja['firmaTecnico']),
+                              height: 100,
+                            ),
+                          if (hoja['nombreTecnico'] != null)
+                            pw.Text(hoja['nombreTecnico']),
+                        ],
+                      ),
+                    ),
+                    pw.SizedBox(width: 12),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.center,
+                        children: [
+                          pw.Text('Firma de quien recibe', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                          if (hoja['firmaRecibe'] != null)
+                            pw.Image(
+                              pw.MemoryImage(hoja['firmaRecibe']),
+                              height: 100,
+                            ),
+                          if (hoja['nombreRecibe'] != null)
+                            pw.Text(hoja['nombreRecibe']),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            pw.SizedBox(height: 12),
             pw.Text(
               'En CAFRI, estamos comprometidos con la reducción del uso de papel y trabajamos continuamente para ser más amigables con el medio ambiente. '
               'Nos esforzamos en la mejora constante y la actualización de nuestros sistemas para minimizar nuestro impacto ecológico.\n\n'

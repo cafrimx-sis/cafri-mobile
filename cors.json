@@ -1,0 +1,17 @@
+[
+  {
+    "origin": [
+      "http://localhost:61279",
+      "https://flutter-cafri-crud-test.web.app"
+    ],
+    "method": ["GET", "HEAD"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Content-Disposition",
+      "Content-Length",
+      "Cache-Control",
+      "Access-Control-Allow-Origin"
+    ]
+  }
+]
