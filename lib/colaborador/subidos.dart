@@ -70,6 +70,12 @@ class _SubidosScreenState extends State<SubidosScreen> {
         }
       }
 
+
+      // Si ya existe en Storage, reasignar para no sobrescribir.
+      if (await existePdfTareaEnStorage(folioAEnviar)) {
+        folioAEnviar = await FolioService.getAndUpdateFolio();
+      }
+
       // Verificar si el folio ya fue procesado
       final yaFueProcesado = await FolioService.folioYaFueProcesado(
         folioAEnviar,
@@ -91,11 +97,27 @@ class _SubidosScreenState extends State<SubidosScreen> {
         }
 
         // Intentar subir con nuevo folio
-        await subirPdfTarea(
+        final sendResult = await subirPdfTarea(
           item.pdfBytes,
           nuevoFolio,
           nombreCliente: item.nombreCliente,
         );
+        if (sendResult.status != PdfSendStatus.uploaded) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(sendResult.message),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          _loadPendingPdfs();
+          setState(() {
+            _isSending = false;
+          });
+          return;
+        }
 
         // Asegurar que el folio en la config no disminuya
         await FolioService.updateFolio(nuevoFolio);
@@ -122,11 +144,27 @@ class _SubidosScreenState extends State<SubidosScreen> {
       }
 
       // Enviar PDF con folioAEnviar
-      await subirPdfTarea(
+      final sendResult = await subirPdfTarea(
         item.pdfBytes,
         folioAEnviar,
         nombreCliente: item.nombreCliente,
       );
+      if (sendResult.status != PdfSendStatus.uploaded) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(sendResult.message),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+        _loadPendingPdfs();
+        setState(() {
+          _isSending = false;
+        });
+        return;
+      }
 
       // Actualizar folio de forma segura (atómica)
       await FolioService.updateFolio(folioAEnviar);
@@ -213,11 +251,15 @@ class _SubidosScreenState extends State<SubidosScreen> {
             // Reasignar folio de forma atómica y subir con el nuevo folio
             try {
               final nuevoFolio = await FolioService.getAndUpdateFolio();
-              await subirPdfTarea(
+              final sendResult = await subirPdfTarea(
                 item.pdfBytes,
                 nuevoFolio,
                 nombreCliente: item.nombreCliente,
               );
+              if (sendResult.status != PdfSendStatus.uploaded) {
+                errores++;
+                continue;
+              }
               await FolioService.updateFolio(nuevoFolio);
               await _queueService.removePdfFromQueue(item.folio);
               enviados++;
@@ -229,11 +271,15 @@ class _SubidosScreenState extends State<SubidosScreen> {
           }
 
           // Enviar PDF con folio ajustado
-          await subirPdfTarea(
+          final sendResult = await subirPdfTarea(
             item.pdfBytes,
             folioAEnviar,
             nombreCliente: item.nombreCliente,
           );
+          if (sendResult.status != PdfSendStatus.uploaded) {
+            errores++;
+            continue;
+          }
 
           // Actualizar folio de forma segura
           await FolioService.updateFolio(folioAEnviar);
@@ -543,3 +589,5 @@ class _SubidosScreenState extends State<SubidosScreen> {
     );
   }
 }
+
+

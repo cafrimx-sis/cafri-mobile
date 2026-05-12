@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: unnecessary_null_comparison, use_build_context_synchronously
 
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -10,6 +10,9 @@ import 'package:printing/printing.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:cafri/helpers/upload_pdf_storage.dart';
 import 'folio_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image/image.dart' as img;
 
 class MaterialRowData {
   final TextEditingController material = TextEditingController();
@@ -40,6 +43,11 @@ class FormularioAvancesPDF extends StatefulWidget {
 }
 
 class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
+  static const _colorBg = Color(0xFFF3F6FB);
+  static const _colorCard = Colors.white;
+  static const _colorHeader = Color(0xFF0F4C81);
+  static const _colorAccent = Color(0xFF1D9A6C);
+
   // Datos generales
   final TextEditingController proyectoObra = TextEditingController();
   final TextEditingController clienteContratista = TextEditingController();
@@ -80,6 +88,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
   // Folio
   int? folioActual;
   bool cargandoFolio = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -93,6 +102,134 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
       folioActual = f;
       cargandoFolio = false;
     });
+  }
+
+  void _limpiarFormulario() {
+    proyectoObra.clear();
+    clienteContratista.clear();
+    obraDescripcion.clear();
+    obraEspecificaciones.clear();
+    actividadRealizada.clear();
+    areaNivelObra.clear();
+    descripcionTrabajo.clear();
+
+    fotosInicio.clear();
+    fotosDurante.clear();
+    fotosDespues.clear();
+
+    firmaTecnicoController.clear();
+    firmaClienteController.clear();
+    firmaTecnico = null;
+    firmaCliente = null;
+    nombreTecnicoController.clear();
+    nombreClienteController.clear();
+
+    for (final m in materiales) {
+      m.dispose();
+    }
+    materiales
+      ..clear()
+      ..add(MaterialRowData());
+  }
+
+  Uint8List _crearThumbnail(Uint8List bytes) {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+    final resized = img.copyResize(decoded, width: 240);
+    return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
+  }
+
+  Future<(List<String> full, List<String> thumbs)> _subirFotosLote({
+    required int folio,
+    required String seccion,
+    required List<Uint8List> fotos,
+  }) async {
+    final urls = <String>[];
+    final thumbs = <String>[];
+    final baseRef = FirebaseStorage.instance
+        .ref('pdfs/avances/Avance_$folio/fotos/$seccion');
+    for (var i = 0; i < fotos.length; i++) {
+      final ref = baseRef.child('${seccion}_${i + 1}.jpg');
+      final thumbRef = baseRef.child('thumb_${seccion}_${i + 1}.jpg');
+      await ref.putData(
+        fotos[i],
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      urls.add(await ref.getDownloadURL());
+
+      final thumbBytes = _crearThumbnail(fotos[i]);
+      await thumbRef.putData(
+        thumbBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      thumbs.add(await thumbRef.getDownloadURL());
+    }
+    return (urls, thumbs);
+  }
+
+  Future<Map<String, String>> _subirFirmas({
+    required int folio,
+    required Uint8List firmaTecnicoBytes,
+    required Uint8List firmaClienteBytes,
+  }) async {
+    final baseRef =
+        FirebaseStorage.instance.ref('pdfs/avances/Avance_$folio/firmas');
+    final tecnicoRef = baseRef.child('tecnico.png');
+    final clienteRef = baseRef.child('cliente.png');
+
+    await tecnicoRef.putData(
+      firmaTecnicoBytes,
+      SettableMetadata(contentType: 'image/png'),
+    );
+    await clienteRef.putData(
+      firmaClienteBytes,
+      SettableMetadata(contentType: 'image/png'),
+    );
+
+    return {
+      'tecnico': await tecnicoRef.getDownloadURL(),
+      'cliente': await clienteRef.getDownloadURL(),
+    };
+  }
+
+  Future<void> _guardarFormularioAvances({
+    required int folio,
+    required String fechaFormateada,
+    required String pdfUrl,
+    required Map<String, List<String>> fotosUrls,
+    required Map<String, List<String>> fotosThumbUrls,
+    required Map<String, String> firmasUrls,
+  }) async {
+    await FirebaseFirestore.instance
+        .collection('avances')
+        .doc('Avance_$folio')
+        .set({
+      'folio': folio,
+      'fechaFormateada': fechaFormateada,
+      'proyectoObra': proyectoObra.text.trim(),
+      'clienteContratista': clienteContratista.text.trim(),
+      'obraDescripcion': obraDescripcion.text.trim(),
+      'obraEspecificaciones': obraEspecificaciones.text.trim(),
+      'actividadRealizada': actividadRealizada.text.trim(),
+      'areaNivelObra': areaNivelObra.text.trim(),
+      'descripcionTrabajo': descripcionTrabajo.text.trim(),
+      'materiales': materiales.map((m) => m.toMap()).toList(),
+      'fotos': {
+        'inicio': fotosInicio.length,
+        'durante': fotosDurante.length,
+        'despues': fotosDespues.length,
+      },
+      'fotosUrls': fotosUrls,
+      'fotosThumbUrls': fotosThumbUrls,
+      'firmasNombres': {
+        'tecnico': nombreTecnicoController.text.trim(),
+        'cliente': nombreClienteController.text.trim(),
+      },
+      'firmasUrls': firmasUrls,
+      'pdfUrl': pdfUrl,
+      'pdfPath': 'pdfs/avances/Avance_$folio.pdf',
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -218,33 +355,51 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     }
   }
 
-  Widget _seccionConTitulo(String titulo, Widget child) {
+  Widget _seccionConTitulo(String titulo, Widget child, {IconData? icon}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(8),
+        color: _colorCard,
+        border: Border.all(color: const Color(0xFFD5DFEC)),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x100F172A),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
             decoration: const BoxDecoration(
-              color: Color(0xFFE0E0E0),
+              color: _colorHeader,
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(8),
                 topRight: Radius.circular(8),
               ),
             ),
-            child: Center(
-              child: Text(
-                titulo,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: Colors.white, size: 19),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
           ),
-          Padding(padding: const EdgeInsets.all(12.0), child: child),
+          Padding(padding: const EdgeInsets.all(14), child: child),
         ],
       ),
     );
@@ -253,11 +408,21 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
   Widget _encabezadoCafri() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F4C81), Color(0xFF155D9A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x220F4C81),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,22 +444,31 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                 Text(
                   'REPORTE DE AVANCES',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
                     fontSize: 18,
                     letterSpacing: 1.2,
                   ),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  'COMPANIA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
+                  style: TextStyle(
+                    color: Color(0xFFEAF2FF),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
                 SizedBox(height: 4),
-                Text('Teléfono: (999) 102 1232'),
-                Text('Número de identificación empresarial: AAF2306305G0'),
-                Text('Email: contacto@cafrimx.com'),
+                Text('Telefono: (999) 102 1232', style: TextStyle(color: Color(0xFFEAF2FF))),
                 Text(
-                  'Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230',
+                  'Numero de identificacion empresarial: AAF2306305G0',
+                  style: TextStyle(color: Color(0xFFEAF2FF)),
+                ),
+                Text('Email: contacto@cafrimx.com', style: TextStyle(color: Color(0xFFEAF2FF))),
+                Text(
+                  'Direccion: C. 59K N 537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230',
+                  style: TextStyle(color: Color(0xFFEAF2FF)),
                 ),
               ],
             ),
@@ -304,11 +478,100 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     );
   }
 
+  Widget _buildDatoRapido({
+    required IconData icon,
+    required String titulo,
+    required String valor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD5DFEC)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: _colorHeader, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            '$titulo: ',
+            style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
+          ),
+          Flexible(
+            child: Text(
+              valor,
+              style: const TextStyle(color: Color(0xFF475569)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _firmaCard({
+    required String titulo,
+    required Uint8List? firma,
+    required TextEditingController nombreController,
+    required VoidCallback onFirmar,
+    required VoidCallback onEliminarFirma,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFCFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD5DFEC)),
+      ),
+      child: Column(
+        children: [
+          Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          if (firma != null) ...[
+            Image.memory(firma, height: 100),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nombreController,
+              decoration: InputDecoration(labelText: 'Nombre del $titulo'),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onEliminarFirma,
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                label: const Text('Eliminar firma', style: TextStyle(color: Colors.red)),
+              ),
+            ),
+          ] else
+            OutlinedButton.icon(
+              onPressed: onFirmar,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Capturar firma'),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _fotosSeccion(String titulo, List<Uint8List> fotos) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Row(
+          children: [
+            Text(
+              titulo,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '(${fotos.length})',
+              style: const TextStyle(color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -342,11 +605,11 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                 width: 90,
                 height: 90,
                 decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: const Color(0xFFF2F5F9),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey),
+                  border: Border.all(color: const Color(0xFFBCCBDE)),
                 ),
-                child: const Icon(Icons.add_a_photo, size: 32, color: Colors.grey),
+                child: const Icon(Icons.add_a_photo, size: 30, color: Color(0xFF5B6C80)),
               ),
             ),
           ],
@@ -361,29 +624,51 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     final fechaFormateada = '${fechaActual.day.toString().padLeft(2, '0')}/${fechaActual.month.toString().padLeft(2, '0')}/${fechaActual.year} ${fechaActual.hour.toString().padLeft(2, '0')}:${fechaActual.minute.toString().padLeft(2, '0')}';
 
     if (cargandoFolio || folioActual == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: _colorBg,
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Reporte de Avances - PDF')),
+      backgroundColor: _colorBg,
+      appBar: AppBar(
+        title: const Text('Reporte de Avances'),
+        backgroundColor: _colorHeader,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _encabezadoCafri(),
-              Row(
-                children: [
-                  const Text('Folio (Avance): ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text('${folioActual!}')
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('Fecha: $fechaFormateada'),
-              const SizedBox(height: 16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1000),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _encabezadoCafri(),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _buildDatoRapido(
+                          icon: Icons.tag_outlined,
+                          titulo: 'Folio',
+                          valor: '${folioActual!}',
+                        ),
+                        _buildDatoRapido(
+                          icon: Icons.calendar_month_outlined,
+                          titulo: 'Fecha',
+                          valor: fechaFormateada,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
               _seccionConTitulo(
                 '1. Datos generales',
+                icon: Icons.assignment_ind_outlined,
                 Column(
                   children: [
                     TextField(
@@ -400,6 +685,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '2. Obra',
+                icon: Icons.construction_outlined,
                 Column(
                   children: [
                     TextField(
@@ -418,6 +704,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '3. Avances (fotos)',
+                icon: Icons.photo_library_outlined,
                 Column(
                   children: [
                     _fotosSeccion('Inicio', fotosInicio),
@@ -430,6 +717,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '4. Reporte del día',
+                icon: Icons.summarize_outlined,
                 Column(
                   children: [
                     TextField(
@@ -447,6 +735,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '5. Resumen de materiales utilizados',
+                icon: Icons.inventory_2_outlined,
                 Column(
                   children: [
                     Row(
@@ -470,7 +759,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                             Expanded(
                               child: TextField(
                                 controller: e.value.material,
-                                decoration: const InputDecoration(hintText: 'Material'),
+                                decoration: const InputDecoration(hintText: 'Material o insumo'),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -498,7 +787,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
                               onPressed: () {
                                 setState(() {
                                   if (materiales.length > 1) {
@@ -516,7 +805,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         onPressed: () => setState(() => materiales.add(MaterialRowData())),
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Agregar material'),
                       ),
                     )
@@ -525,6 +814,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '6. Descripción del trabajo',
+                icon: Icons.description_outlined,
                 TextField(
                   controller: descripcionTrabajo,
                   decoration: const InputDecoration(hintText: 'Describe el trabajo realizado'),
@@ -533,67 +823,29 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '7. Firmas',
-                Row(
+                icon: Icons.draw_outlined,
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          const Text('Técnico', style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          if (firmaTecnico != null)
-                            Column(
-                              children: [
-                                Image.memory(firmaTecnico!, height: 100),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: nombreTecnicoController,
-                                  decoration: const InputDecoration(labelText: 'Nombre del técnico'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => setState(() => firmaTecnico = null),
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  label: const Text('Eliminar firma', style: TextStyle(color: Colors.red)),
-                                )
-                              ],
-                            )
-                          else
-                            ElevatedButton.icon(
-                              onPressed: () => _tomarFirmas(esTecnico: true),
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Firmar'),
-                            ),
-                        ],
+                    SizedBox(
+                      width: 420,
+                      child: _firmaCard(
+                        titulo: 'tecnico',
+                        firma: firmaTecnico,
+                        nombreController: nombreTecnicoController,
+                        onFirmar: () => _tomarFirmas(esTecnico: true),
+                        onEliminarFirma: () => setState(() => firmaTecnico = null),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          const Text('Cliente', style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          if (firmaCliente != null)
-                            Column(
-                              children: [
-                                Image.memory(firmaCliente!, height: 100),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: nombreClienteController,
-                                  decoration: const InputDecoration(labelText: 'Nombre del cliente'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => setState(() => firmaCliente = null),
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  label: const Text('Eliminar firma', style: TextStyle(color: Colors.red)),
-                                )
-                              ],
-                            )
-                          else
-                            ElevatedButton.icon(
-                              onPressed: () => _tomarFirmas(esTecnico: false),
-                              icon: const Icon(Icons.edit),
-                              label: const Text('Firmar'),
-                            ),
-                        ],
+                    SizedBox(
+                      width: 420,
+                      child: _firmaCard(
+                        titulo: 'cliente',
+                        firma: firmaCliente,
+                        nombreController: nombreClienteController,
+                        onFirmar: () => _tomarFirmas(esTecnico: false),
+                        onEliminarFirma: () => setState(() => firmaCliente = null),
                       ),
                     ),
                   ],
@@ -603,7 +855,14 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               Center(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.picture_as_pdf),
-                  label: const Text('Guardar como PDF'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _colorAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  label: const Text('Guardar y enviar PDF'),
                   onPressed: () async {
                     final validation = _validar();
                     if (validation != null) {
@@ -682,12 +941,29 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                         throw Exception('El PDF generado está vacío');
                       }
 
+                      String? pdfUrl;
                       try {
-                        await subirPdfAvances(
+                        final result = await subirPdfAvances(
                           bytes,
                           folioParaPDF,
                           nombreCliente: clienteContratista.text,
                         );
+                        if (result.status == PdfSendStatus.queued) {
+                          if (mounted) {
+                            Navigator.of(context)
+                                .pop(); // Cerrar diálogo de progreso
+                          }
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(result.message),
+                              backgroundColor: Colors.orange,
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                          return;
+                        }
+                        pdfUrl = result.downloadUrl;
                       } catch (e) {
                         // Error al subir, pero puede estar en cola
                         final errorMsg = e.toString();
@@ -706,7 +982,104 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                         return;
                       }
 
-                      // Si llegamos aquí, la subida fue exitosa
+                      if (pdfUrl != null) {
+                        Map<String, List<String>> fotosUrls = {
+                          'inicio': const [],
+                          'durante': const [],
+                          'despues': const [],
+                        };
+                        Map<String, List<String>> fotosThumbUrls = {
+                          'inicio': const [],
+                          'durante': const [],
+                          'despues': const [],
+                        };
+                        Map<String, String> firmasUrls = {};
+
+                        try {
+                          final inicio = await _subirFotosLote(
+                            folio: folioParaPDF,
+                            seccion: 'inicio',
+                            fotos: fotosInicio,
+                          );
+                          final durante = await _subirFotosLote(
+                            folio: folioParaPDF,
+                            seccion: 'durante',
+                            fotos: fotosDurante,
+                          );
+                          final despues = await _subirFotosLote(
+                            folio: folioParaPDF,
+                            seccion: 'despues',
+                            fotos: fotosDespues,
+                          );
+
+                          fotosUrls = {
+                            'inicio': inicio.$1,
+                            'durante': durante.$1,
+                            'despues': despues.$1,
+                          };
+                          fotosThumbUrls = {
+                            'inicio': inicio.$2,
+                            'durante': durante.$2,
+                            'despues': despues.$2,
+                          };
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'PDF subido, pero no se pudieron subir las fotos: $e',
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          }
+                        }
+
+                        try {
+                          firmasUrls = await _subirFirmas(
+                            folio: folioParaPDF,
+                            firmaTecnicoBytes: firmaTecnico!,
+                            firmaClienteBytes: firmaCliente!,
+                          );
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'PDF subido, pero no se pudieron subir las firmas: $e',
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          }
+                        }
+
+                        try {
+                          await _guardarFormularioAvances(
+                            folio: folioParaPDF,
+                            fechaFormateada: fechaFormateada,
+                            pdfUrl: pdfUrl,
+                            fotosUrls: fotosUrls,
+                            fotosThumbUrls: fotosThumbUrls,
+                            firmasUrls: firmasUrls,
+                          );
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'PDF subido, pero no se pudo guardar el formulario: $e',
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          }
+                        }
+                      }
+
                       await FolioService.updateFolio(folioParaPDF);
                       
                       if (mounted) {
@@ -724,6 +1097,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
 
                       setState(() {
                         folioActual = folioParaPDF + 1;
+                        _limpiarFormulario();
                       });
 
                       await Printing.layoutPdf(
@@ -751,6 +1125,9 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
           ),
         ),
       ),
+    ),
+  ),
+      ),
     );
   }
 }
@@ -776,11 +1153,62 @@ class PdfAvancesGenerator {
     required String nombreCliente,
     required Uint8List logoBytes,
   }) async {
-    final pdf = pw.Document();
+    final fontData = await rootBundle.load(
+      'packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf',
+    );
+    final baseFont = pw.Font.ttf(fontData);
+    final theme = pw.ThemeData.withFont(
+      base: baseFont,
+      bold: baseFont,
+    );
+    final pdf = pw.Document(theme: theme);
+    final headerColor = PdfColor.fromInt(0xFF0F4C81);
+    final borderColor = PdfColor.fromInt(0xFFD5DFEC);
+    final lightBg = PdfColor.fromInt(0xFFF8FAFD);
+
+    pw.Widget buildPdfTitulo(String titulo) {
+      return pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: pw.BoxDecoration(
+          color: headerColor,
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Text(
+          titulo.toUpperCase(),
+          style: pw.TextStyle(
+            color: PdfColors.white,
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+      );
+    }
+
+    pw.Widget buildCardSection(String titulo, List<pw.Widget> children) {
+      return pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 10),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: borderColor),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
+        child: pw.Padding(
+          padding: const pw.EdgeInsets.all(8),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              buildPdfTitulo(titulo),
+              pw.SizedBox(height: 6),
+              ...children,
+            ],
+          ),
+        ),
+      );
+    }
 
     pw.Widget buildFotoGrid(String titulo, List<Uint8List> fotos) {
       return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text(titulo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 6),
@@ -804,7 +1232,7 @@ class PdfAvancesGenerator {
 
     pw.TableRow buildHeaderRow(List<String> headers) {
       return pw.TableRow(
-        decoration: pw.BoxDecoration(color: PdfColors.grey300),
+        decoration: pw.BoxDecoration(color: lightBg),
         children: headers
             .map((h) => pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
@@ -818,11 +1246,12 @@ class PdfAvancesGenerator {
       pw.MultiPage(
         build: (context) => [
           pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
               pw.Container(
-                width: 80,
-                height: 80,
+                width: 62,
+                height: 62,
+                padding: const pw.EdgeInsets.only(top: 6),
                 child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
               ),
               pw.SizedBox(width: 16),
@@ -834,20 +1263,20 @@ class PdfAvancesGenerator {
                       'HOJA DE SERVICIO',
                       style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 17,
                         letterSpacing: 1.2,
                       ),
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
                       'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5),
                     ),
                     pw.SizedBox(height: 4),
-                    pw.Text('Teléfono: (999) 102 1232'),
-                    pw.Text('Número de identificación empresarial: AAF2306305G0'),
-                    pw.Text('Email: contacto@cafrimx.com'),
-                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230'),
+                    pw.Text('Teléfono: (999) 102 1232', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Número de identificación empresarial: AAF2306305G0', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Email: contacto@cafrimx.com', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230', style: const pw.TextStyle(fontSize: 8.5)),
                   ],
                 ),
               ),
@@ -856,103 +1285,104 @@ class PdfAvancesGenerator {
           pw.SizedBox(height: 8),
           pw.Divider(),
 
-          // 1. Datos generales
-          pw.Text('1. Datos generales', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text('Proyecto/Obra: $proyectoObra'),
-          pw.Text('Cliente/Contratista: $clienteContratista'),
-          pw.SizedBox(height: 12),
-
-          // 2. Obra
-          pw.Text('2. Obra', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text('Descripción: $obraDescripcion'),
-          pw.SizedBox(height: 4),
-          pw.Text('Especificaciones técnicas: $obraEspecificaciones'),
-          pw.SizedBox(height: 12),
-
-          // 3. Avances
-          pw.Text('3. Avances (fotos)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 6),
-          buildFotoGrid('Inicio', fotosInicio),
-          pw.SizedBox(height: 6),
-          buildFotoGrid('Durante', fotosDurante),
-          pw.SizedBox(height: 6),
-          buildFotoGrid('Después', fotosDespues),
-          pw.SizedBox(height: 12),
-
-          // 4. Reporte del día
-          pw.Text('4. Reporte del día', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text('Actividad realizada: $actividadRealizada'),
-          pw.Text('Área/Nivel de obra: $areaNivelObra'),
-          pw.SizedBox(height: 12),
-
-          // 5. Resumen de materiales (tabla)
-          pw.Text('5. Resumen de materiales utilizados', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 6),
-          pw.Table(
-            border: pw.TableBorder.all(),
-            children: [
-              buildHeaderRow(['Material', 'Unidad', 'Cantidad', 'Observaciones']),
-              ...materiales.map(
-                (m) => pw.TableRow(
-                  children: [
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['material'] ?? '')),
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['unidad'] ?? '')),
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['cantidad'] ?? '')),
-                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['observaciones'] ?? '')),
-                  ],
-                ),
+          buildCardSection(
+            '1. Datos generales',
+            [
+              pw.Text('Proyecto/Obra: $proyectoObra'),
+              pw.Text('Cliente/Contratista: $clienteContratista'),
+            ],
+          ),
+          buildCardSection(
+            '2. Obra',
+            [
+              pw.Text('Descripci�n: '),
+              pw.SizedBox(height: 4),
+              pw.Text('Especificaciones t�cnicas: '),
+            ],
+          ),
+          buildCardSection(
+            '3. Avances (fotos)',
+            [
+              buildFotoGrid('Inicio', fotosInicio),
+              pw.SizedBox(height: 6),
+              buildFotoGrid('Durante', fotosDurante),
+              pw.SizedBox(height: 6),
+              buildFotoGrid('Despu�s', fotosDespues),
+            ],
+          ),
+          buildCardSection(
+            '4. Reporte del d�a',
+            [
+              pw.Text('Actividad realizada: '),
+              pw.Text('�rea/Nivel de obra: '),
+            ],
+          ),
+          buildCardSection(
+            '5. Resumen de materiales utilizados',
+            [
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey400),
+                children: [
+                  buildHeaderRow(['Material', 'Unidad', 'Cantidad', 'Observaciones']),
+                  ...materiales.map(
+                    (m) => pw.TableRow(
+                      children: [
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['material'] ?? '')),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['unidad'] ?? '')),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['cantidad'] ?? '')),
+                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['observaciones'] ?? '')),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          pw.SizedBox(height: 12),
-
-          // 6. Descripción del trabajo
-          pw.Text('6. Descripción del trabajo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text(descripcionTrabajo),
-          pw.SizedBox(height: 12),
-
-          // 7. Firmas
-          pw.Text('7. Firmas', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 8),
-            pw.Row(
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  children: [
-                    pw.Text('Técnico', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 4),
-                    pw.Image(pw.MemoryImage(firmaTecnico), height: 80),
-                    pw.SizedBox(height: 4),
-                    pw.Text(nombreTecnico),
-                  ],
-                ),
-              ),
-              pw.SizedBox(width: 12),
-              pw.Expanded(
-                child: pw.Column(
-                  children: [
-                    pw.Text('Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 4),
-                    pw.Image(pw.MemoryImage(firmaCliente), height: 80),
-                    pw.SizedBox(height: 4),
-                    pw.Text(nombreCliente),
-                  ],
-                ),
+          buildCardSection(
+            '6. Descripci�n del trabajo',
+            [
+              pw.Text(descripcionTrabajo),
+            ],
+          ),
+          buildCardSection(
+            '7. Firmas',
+            [
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      children: [
+                        pw.Text('T�cnico', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 4),
+                        pw.Image(pw.MemoryImage(firmaTecnico), height: 80),
+                        pw.SizedBox(height: 4),
+                        pw.Text(nombreTecnico),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(
+                    child: pw.Column(
+                      children: [
+                        pw.Text('Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 4),
+                        pw.Image(pw.MemoryImage(firmaCliente), height: 80),
+                        pw.SizedBox(height: 4),
+                        pw.Text(nombreCliente),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          pw.SizedBox(height: 12),
-          pw.Text(
+pw.Text(
             'En CAFRI, estamos comprometidos con la reducción del uso de papel y trabajamos continuamente para ser más amigables con el medio ambiente. '
             'Nos esforzamos en la mejora constante y la actualización de nuestros sistemas para minimizar nuestro impacto ecológico.\n\n'
             '(999) 102 1232 / (999) 490 1637   cafrimx.com\n\n'
             'Este documento es propiedad de la empresa CAFRI COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V. con domicilio en Calle 59 K, 537 Cp. 97230 en la ciudad de Mérida, Yucatán, '
             'por lo que queda prohibida la reproducción parcial o total de este documento y se tomarán acciones legales.',
-            style: pw.TextStyle(fontSize: 10),
+            style: pw.TextStyle(fontSize: 9),
             textAlign: pw.TextAlign.center,
           ),
         ],

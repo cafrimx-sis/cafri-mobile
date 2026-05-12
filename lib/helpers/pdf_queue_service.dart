@@ -3,6 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 
 class PdfQueueItem {
   final int folio;
@@ -146,7 +147,20 @@ class PdfQueueService {
   /// Verifica si hay conexión a internet
   Future<bool> hasInternetConnection() async {
     final connectivityResult = await Connectivity().checkConnectivity();
-    return !connectivityResult.contains(ConnectivityResult.none);
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      return false;
+    }
+
+    // Wi‑Fi/datos no siempre significa "internet". Verificación rápida con DNS.
+    try {
+      final result = await InternetAddress.lookup('example.com')
+          .timeout(const Duration(seconds: 3));
+      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } on TimeoutException {
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Limpia toda la cola
