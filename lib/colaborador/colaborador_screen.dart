@@ -10,13 +10,21 @@ import 'package:cafri/colaborador/pdf.dart';
 import 'package:cafri/colaborador/pdf_avances.dart';
 import 'package:cafri/colaborador/ubicacion.dart';
 import 'package:cafri/colaborador/actividades_screen.dart';
-// import 'package:cafri/colaborador/historial_rutas.dart';
+import 'package:cafri/colaborador/pdfs_guardados.dart';
 import 'package:cafri/colaborador/ruta.dart';
 import 'package:cafri/colaborador/subidos.dart';
 
-enum ColaboradorSection { actividades, calendario, documento, avances, mapa, subidos }
+enum ColaboradorSection {
+  actividades,
+  calendario,
+  documento,
+  avances,
+  mapa,
+  subidos,
+  guardados,
+}
 
-/// Widget reutilizable para mostrar el Avatar/Fotografía del usuario (igual al AdminScreen)
+/// Widget reutilizable para mostrar el Avatar/Fotografía del usuario
 class CustomUserAvatar extends StatelessWidget {
   final String? photoUrl;
   final String? displayName;
@@ -37,7 +45,7 @@ class CustomUserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color bgColor = color ?? Colors.indigo.withAlpha(217);
+    final Color bgColor = color ?? const Color(0xFF0056B3);
 
     Widget child;
     if (photoUrl != null && photoUrl!.isNotEmpty) {
@@ -85,7 +93,6 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
   late String userEmail;
   late String userId;
 
-  // INICIO: NUEVO - Datos perfil
   String? photoUrl;
   String? nombre;
   String? rol;
@@ -93,6 +100,11 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
   ColaboradorSection selectedSection = ColaboradorSection.actividades;
   final AuthService _authService = AuthService();
   final String googleMapsApiKey = 'AIzaSyDgJ6emXC-cKpFJ-CFhWiglhp0pq2xWf2c';
+
+  // Paleta de colores visuales homologada
+  static const _colorHeader = Color(0xFF003366);
+  static const _colorAccent = Color(0xFF0056B3);
+  static const _colorBg = Color(0xFFF3F6FB);
 
   @override
   void initState() {
@@ -103,15 +115,12 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
     if (user != null) {
       _loadUserInfo(user.uid);
     }
-    _crearDocumentoInicialColaborador(userId: userId, email: userEmail).then((
-      _,
-    ) {
+    _crearDocumentoInicialColaborador(userId: userId, email: userEmail).then((_) {
       SeguimientoTiempoRealService.start(userId, nombre: userEmail);
     });
   }
 
   Future<void> _loadUserInfo(String uid) async {
-    // Cambia la colección a la que tú uses para los colaboradores
     final doc = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -150,9 +159,9 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
                       fit: BoxFit.contain,
                       loadingBuilder: (ctx, child, loadingProgress) {
                         if (loadingProgress == null) return child;
-                        return Padding(
-                          padding: const EdgeInsets.all(60.0),
-                          child: CircularProgressIndicator(),
+                        return const Padding(
+                          padding: EdgeInsets.all(60.0),
+                          child: CircularProgressIndicator(color: _colorAccent),
                         );
                       },
                       errorBuilder: (context, error, stackTrace) =>
@@ -204,7 +213,7 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
     super.dispose();
   }
 
-  void _handleDrawerSelection(ColaboradorSection section) async {
+  void _handleDrawerSelection(ColaboradorSection section) {
     Navigator.pop(context);
     setState(() {
       selectedSection = section;
@@ -215,17 +224,21 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Deseas cerrar sesión?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text('Cerrar sesión', style: TextStyle(fontWeight: FontWeight.bold, color: _colorHeader)),
+        content: const Text('¿Deseas cerrar sesión del sistema?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Cerrar sesión'),
+            child: const Text('Cerrar sesión', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -240,17 +253,9 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
     }
   }
 
-  Widget _buildActividades() {
-    return ColaboradorActividadesScreen();
-  }
-
-  Widget _buildCalendario() {
-    return ColaboradorCalendario(userEmail: userEmail);
-  }
-
-  Widget _buildMapa() {
-    return MapaConRutaDesdeUrl(apiKey: googleMapsApiKey);
-  }
+  Widget _buildActividades() => const ColaboradorActividadesScreen();
+  Widget _buildCalendario() => ColaboradorCalendario(userEmail: userEmail);
+  Widget _buildMapa() => MapaConRutaDesdeUrl(apiKey: googleMapsApiKey);
 
   Widget _buildProfileInfo(BuildContext context) {
     String displayName = nombre?.isNotEmpty == true ? nombre! : 'Usuario';
@@ -259,10 +264,10 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
+            border: Border.all(color: Colors.white, width: 2.0),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(30),
+                color: Colors.black.withOpacity(0.15),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -271,67 +276,94 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
           child: CustomUserAvatar(
             photoUrl: photoUrl,
             displayName: nombre,
-            radius: 20,
-            fontSize: 17,
+            radius: 18,
+            fontSize: 15,
             onTap: _showFullProfilePhoto,
           ),
         ),
-        const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              displayName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                letterSpacing: 0.6,
-                shadows: [
-                  Shadow(
-                    color: Colors.black45,
-                    blurRadius: 2,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              softWrap: false,
-            ),
-            if (rol != null)
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
               Text(
-                rol!,
+                displayName,
                 style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: 0.3,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  letterSpacing: 0.4,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
-                softWrap: false,
               ),
-          ],
+              if (rol != null)
+                Text(
+                  rol!,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    required ColaboradorSection section,
+  }) {
+    final isSelected = selectedSection == section;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isSelected ? _colorAccent.withOpacity(0.12) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          icon,
+          color: isSelected ? _colorAccent : Colors.grey.shade600,
+          size: 22,
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? _colorAccent : Colors.grey.shade800,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+        selected: isSelected,
+        onTap: () => _handleDrawerSelection(section),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _colorBg,
       appBar: AppBar(
-        backgroundColor: Colors.indigo,
-        title: _buildProfileInfo(
-          context,
-        ), // Nuevo: avatar y nombre (como Admin)
+        backgroundColor: _colorHeader,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: _buildProfileInfo(context),
         actions: [
           IconButton(
             icon: const Icon(
               Icons.exit_to_app,
-              color: Colors.redAccent,
-              size: 28,
+              color: Colors.white70,
+              size: 24,
             ),
             tooltip: 'Salir',
             onPressed: _logout,
@@ -339,19 +371,26 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
         ],
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        backgroundColor: Colors.white,
+        child: Column(
           children: [
             DrawerHeader(
-              decoration: const BoxDecoration(color: Colors.indigo),
+              margin: EdgeInsets.zero,
+              decoration: const BoxDecoration(color: _colorHeader),
               child: Row(
                 children: [
-                  CustomUserAvatar(
-                    photoUrl: photoUrl,
-                    displayName: nombre,
-                    radius: 28,
-                    fontSize: 22,
-                    onTap: _showFullProfilePhoto,
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.0),
+                    ),
+                    child: CustomUserAvatar(
+                      photoUrl: photoUrl,
+                      displayName: nombre,
+                      radius: 26,
+                      fontSize: 20,
+                      onTap: _showFullProfilePhoto,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -360,26 +399,27 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          (nombre != null && nombre!.isNotEmpty)
-                              ? nombre!
-                              : 'Usuario',
+                          (nombre != null && nombre!.isNotEmpty) ? nombre! : 'Usuario',
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 17,
+                            fontSize: 16,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (rol != null)
+                        if (rol != null) ...[
+                          const SizedBox(height: 2),
                           Text(
                             rol!,
                             style: const TextStyle(
                               color: Colors.white70,
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w400,
                             ),
                           ),
-                        if (userEmail.isNotEmpty)
+                        ],
+                        if (userEmail.isNotEmpty) ...[
+                          const SizedBox(height: 2),
                           Text(
                             userEmail,
                             style: const TextStyle(
@@ -388,56 +428,63 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: const Text('Actividades'),
-              selected: selectedSection == ColaboradorSection.actividades,
-              onTap: () =>
-                  _handleDrawerSelection(ColaboradorSection.actividades),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _buildDrawerItem(
+                    icon: Icons.check_circle_outline,
+                    title: 'Actividades',
+                    section: ColaboradorSection.actividades,
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.calendar_today,
+                    title: 'Calendario de actividades',
+                    section: ColaboradorSection.calendario,
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.description,
+                    title: 'Generar documento',
+                    section: ColaboradorSection.documento,
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.trending_up,
+                    title: 'Reporte de Avances',
+                    section: ColaboradorSection.avances,
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.file_upload,
+                    title: 'PDFs Pendientes',
+                    section: ColaboradorSection.subidos,
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.folder_copy_outlined,
+                    title: 'PDFs Guardados',
+                    section: ColaboradorSection.guardados,
+                  ),
+                ],
+              ),
             ),
+            const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Calendario de actividades'),
-              selected: selectedSection == ColaboradorSection.calendario,
-              onTap: () =>
-                  _handleDrawerSelection(ColaboradorSection.calendario),
-            ),
-            ListTile(
-              leading: const Icon(Icons.description),
-              title: const Text('Generar documento'),
-              selected: selectedSection == ColaboradorSection.documento,
-              onTap: () => _handleDrawerSelection(ColaboradorSection.documento),
-            ),
-            ListTile(
-              leading: const Icon(Icons.trending_up),
-              title: const Text('Reporte de Avances'),
-              selected: selectedSection == ColaboradorSection.avances,
-              onTap: () => _handleDrawerSelection(ColaboradorSection.avances),
-            ),
-            ListTile(
-              leading: const Icon(Icons.file_upload),
-              title: const Text('PDFs Pendientes'),
-              selected: selectedSection == ColaboradorSection.subidos,
-              onTap: () => _handleDrawerSelection(ColaboradorSection.subidos),
-            ),
-            // ListTile(
-            //   leading: const Icon(Icons.map),
-            //   title: const Text('Mapa con ruta desde URL'),
-            //   selected: selectedSection == ColaboradorSection.mapa,
-            //   onTap: () => _handleDrawerSelection(ColaboradorSection.mapa),
-            // ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.exit_to_app, color: Colors.red),
-              title: const Text('Salir', style: TextStyle(color: Colors.red)),
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+              leading: const Icon(Icons.exit_to_app, color: Colors.redAccent, size: 22),
+              title: const Text(
+                'Salir',
+                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
               onTap: _logout,
             ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -454,6 +501,8 @@ class _ColaboradorScreenState extends State<ColaboradorScreen> {
               return const FormularioAvancesPDF();
             case ColaboradorSection.subidos:
               return const SubidosScreen();
+            case ColaboradorSection.guardados:
+              return const PdfsGuardadosScreen();
             case ColaboradorSection.mapa:
               return _buildMapa();
           }

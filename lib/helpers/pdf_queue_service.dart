@@ -1,9 +1,8 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:io';
 import 'dart:convert';
-import 'dart:async';
 
 class PdfQueueItem {
   final int folio;
@@ -11,6 +10,7 @@ class PdfQueueItem {
   final Uint8List pdfBytes;
   final DateTime fechaGuardado;
   final String fileName;
+  final String tipo;
 
   PdfQueueItem({
     required this.folio,
@@ -18,6 +18,7 @@ class PdfQueueItem {
     required this.pdfBytes,
     required this.fechaGuardado,
     required this.fileName,
+    this.tipo = 'Tarea',
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +26,7 @@ class PdfQueueItem {
     'nombreCliente': nombreCliente,
     'fechaGuardado': fechaGuardado.toIso8601String(),
     'fileName': fileName,
+    'tipo': tipo,
   };
 
   static PdfQueueItem fromJson(Map<String, dynamic> json, Uint8List pdfBytes) =>
@@ -34,6 +36,7 @@ class PdfQueueItem {
         pdfBytes: pdfBytes,
         fechaGuardado: DateTime.parse(json['fechaGuardado']),
         fileName: json['fileName'],
+        tipo: json['tipo'] ?? 'Tarea',
       );
 }
 
@@ -60,10 +63,11 @@ class PdfQueueService {
     required int folio,
     required String nombreCliente,
     required Uint8List pdfBytes,
+    String tipo = 'Tarea',
   }) async {
     try {
       final queueDir = await _getPdfQueueDir();
-      final fileName = 'Tarea_$folio.pdf';
+      final fileName = '${tipo}_$folio.pdf';
       final filePath = '${queueDir.path}/$fileName';
 
       // Guardar el archivo PDF
@@ -74,15 +78,24 @@ class PdfQueueService {
       List<dynamic> metadata = [];
 
       if (await metadataFile.exists()) {
-        final content = await metadataFile.readAsString();
-        metadata = jsonDecode(content);
+        try {
+          final content = await metadataFile.readAsString();
+          metadata = jsonDecode(content);
+        } catch (e) {
+          // Si el JSON está corrupto, empezamos limpio
+          metadata = [];
+        }
       }
+
+      // Deduplicar antes de agregar
+      metadata.removeWhere((item) => item['fileName'] == fileName);
 
       metadata.add({
         'folio': folio,
         'nombreCliente': nombreCliente,
         'fechaGuardado': DateTime.now().toIso8601String(),
         'fileName': fileName,
+        'tipo': tipo,
       });
 
       await metadataFile.writeAsString(jsonEncode(metadata));
@@ -101,8 +114,14 @@ class PdfQueueService {
         return [];
       }
 
-      final content = await metadataFile.readAsString();
-      final List<dynamic> metadata = jsonDecode(content);
+      List<dynamic> metadata = [];
+      try {
+        final content = await metadataFile.readAsString();
+        metadata = jsonDecode(content);
+      } catch (e) {
+        // En caso de JSON corrupto, devolver lista vacía en lugar de fallar
+        return [];
+      }
 
       List<PdfQueueItem> items = [];
       for (var item in metadata) {
@@ -120,10 +139,10 @@ class PdfQueueService {
   }
 
   /// Elimina un PDF de la cola después de ser enviado
-  Future<void> removePdfFromQueue(int folio) async {
+  Future<void> removePdfFromQueue(int folio, {String tipo = 'Tarea'}) async {
     try {
       final queueDir = await _getPdfQueueDir();
-      final fileName = 'Tarea_$folio.pdf';
+      final fileName = '${tipo}_$folio.pdf';
       final filePath = '${queueDir.path}/$fileName';
 
       // Eliminar archivo PDF
@@ -134,10 +153,14 @@ class PdfQueueService {
       // Actualizar metadata
       final metadataFile = File('${queueDir.path}/queue_metadata.json');
       if (await metadataFile.exists()) {
-        final content = await metadataFile.readAsString();
-        List<dynamic> metadata = jsonDecode(content);
-        metadata.removeWhere((item) => item['fileName'] == fileName);
-        await metadataFile.writeAsString(jsonEncode(metadata));
+        try {
+          final content = await metadataFile.readAsString();
+          List<dynamic> metadata = jsonDecode(content);
+          metadata.removeWhere((item) => item['fileName'] == fileName);
+          await metadataFile.writeAsString(jsonEncode(metadata));
+        } catch (e) {
+          // Ignorar si no se puede leer el metadata al intentar eliminar
+        }
       }
     } catch (e) {
       throw Exception('Error eliminando PDF de la cola: $e');
@@ -147,20 +170,7 @@ class PdfQueueService {
   /// Verifica si hay conexión a internet
   Future<bool> hasInternetConnection() async {
     final connectivityResult = await Connectivity().checkConnectivity();
-    if (connectivityResult.contains(ConnectivityResult.none)) {
-      return false;
-    }
-
-    // Wi‑Fi/datos no siempre significa "internet". Verificación rápida con DNS.
-    try {
-      final result = await InternetAddress.lookup('example.com')
-          .timeout(const Duration(seconds: 3));
-      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
-    } on TimeoutException {
-      return false;
-    } catch (_) {
-      return false;
-    }
+    return !connectivityResult.contains(ConnectivityResult.none);
   }
 
   /// Limpia toda la cola

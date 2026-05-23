@@ -1,18 +1,20 @@
-// ignore_for_file: unnecessary_null_comparison, use_build_context_synchronously
+﻿// ignore_for_file: use_build_context_synchronously
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:signature/signature.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:cafri/helpers/local_pdf_storage.dart';
 import 'package:cafri/helpers/upload_pdf_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'folio_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image/image.dart' as img;
 
 class MaterialRowData {
   final TextEditingController material = TextEditingController();
@@ -42,11 +44,13 @@ class FormularioAvancesPDF extends StatefulWidget {
   State<FormularioAvancesPDF> createState() => _FormularioAvancesPDFState();
 }
 
-class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
+class _FormularioAvancesPDFState extends State<FormularioAvancesPDF>
+    with WidgetsBindingObserver {
+  // Paleta de colores visuales
   static const _colorBg = Color(0xFFF3F6FB);
   static const _colorCard = Colors.white;
-  static const _colorHeader = Color(0xFF0F4C81);
-  static const _colorAccent = Color(0xFF1D9A6C);
+  static const _colorHeader = Color(0xFF003366);
+  static const _colorAccent = Color(0xFF0056B3);
 
   // Datos generales
   final TextEditingController proyectoObra = TextEditingController();
@@ -88,12 +92,25 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
   // Folio
   int? folioActual;
   bool cargandoFolio = true;
-  final _formKey = GlobalKey<FormState>();
+
+  static const String _draftKey = 'pdf_avances_draft_v1';
+  static const int _maxFotosPorSeccion = 12;
+  static const int _jpegQuality = 75;
+
+  final Set<TextEditingController> _autosaveControllers = {};
+  Timer? _autosaveTimer;
+  bool _isRestoringDraft = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _watchAllControllers();
     _cargarFolio();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeRestoreDraft();
+    });
   }
 
   Future<void> _cargarFolio() async {
@@ -104,136 +121,10 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     });
   }
 
-  void _limpiarFormulario() {
-    proyectoObra.clear();
-    clienteContratista.clear();
-    obraDescripcion.clear();
-    obraEspecificaciones.clear();
-    actividadRealizada.clear();
-    areaNivelObra.clear();
-    descripcionTrabajo.clear();
-
-    fotosInicio.clear();
-    fotosDurante.clear();
-    fotosDespues.clear();
-
-    firmaTecnicoController.clear();
-    firmaClienteController.clear();
-    firmaTecnico = null;
-    firmaCliente = null;
-    nombreTecnicoController.clear();
-    nombreClienteController.clear();
-
-    for (final m in materiales) {
-      m.dispose();
-    }
-    materiales
-      ..clear()
-      ..add(MaterialRowData());
-  }
-
-  Uint8List _crearThumbnail(Uint8List bytes) {
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return bytes;
-    final resized = img.copyResize(decoded, width: 240);
-    return Uint8List.fromList(img.encodeJpg(resized, quality: 80));
-  }
-
-  Future<(List<String> full, List<String> thumbs)> _subirFotosLote({
-    required int folio,
-    required String seccion,
-    required List<Uint8List> fotos,
-  }) async {
-    final urls = <String>[];
-    final thumbs = <String>[];
-    final baseRef = FirebaseStorage.instance
-        .ref('pdfs/avances/Avance_$folio/fotos/$seccion');
-    for (var i = 0; i < fotos.length; i++) {
-      final ref = baseRef.child('${seccion}_${i + 1}.jpg');
-      final thumbRef = baseRef.child('thumb_${seccion}_${i + 1}.jpg');
-      await ref.putData(
-        fotos[i],
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      urls.add(await ref.getDownloadURL());
-
-      final thumbBytes = _crearThumbnail(fotos[i]);
-      await thumbRef.putData(
-        thumbBytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      thumbs.add(await thumbRef.getDownloadURL());
-    }
-    return (urls, thumbs);
-  }
-
-  Future<Map<String, String>> _subirFirmas({
-    required int folio,
-    required Uint8List firmaTecnicoBytes,
-    required Uint8List firmaClienteBytes,
-  }) async {
-    final baseRef =
-        FirebaseStorage.instance.ref('pdfs/avances/Avance_$folio/firmas');
-    final tecnicoRef = baseRef.child('tecnico.png');
-    final clienteRef = baseRef.child('cliente.png');
-
-    await tecnicoRef.putData(
-      firmaTecnicoBytes,
-      SettableMetadata(contentType: 'image/png'),
-    );
-    await clienteRef.putData(
-      firmaClienteBytes,
-      SettableMetadata(contentType: 'image/png'),
-    );
-
-    return {
-      'tecnico': await tecnicoRef.getDownloadURL(),
-      'cliente': await clienteRef.getDownloadURL(),
-    };
-  }
-
-  Future<void> _guardarFormularioAvances({
-    required int folio,
-    required String fechaFormateada,
-    required String pdfUrl,
-    required Map<String, List<String>> fotosUrls,
-    required Map<String, List<String>> fotosThumbUrls,
-    required Map<String, String> firmasUrls,
-  }) async {
-    await FirebaseFirestore.instance
-        .collection('avances')
-        .doc('Avance_$folio')
-        .set({
-      'folio': folio,
-      'fechaFormateada': fechaFormateada,
-      'proyectoObra': proyectoObra.text.trim(),
-      'clienteContratista': clienteContratista.text.trim(),
-      'obraDescripcion': obraDescripcion.text.trim(),
-      'obraEspecificaciones': obraEspecificaciones.text.trim(),
-      'actividadRealizada': actividadRealizada.text.trim(),
-      'areaNivelObra': areaNivelObra.text.trim(),
-      'descripcionTrabajo': descripcionTrabajo.text.trim(),
-      'materiales': materiales.map((m) => m.toMap()).toList(),
-      'fotos': {
-        'inicio': fotosInicio.length,
-        'durante': fotosDurante.length,
-        'despues': fotosDespues.length,
-      },
-      'fotosUrls': fotosUrls,
-      'fotosThumbUrls': fotosThumbUrls,
-      'firmasNombres': {
-        'tecnico': nombreTecnicoController.text.trim(),
-        'cliente': nombreClienteController.text.trim(),
-      },
-      'firmasUrls': firmasUrls,
-      'pdfUrl': pdfUrl,
-      'pdfPath': 'pdfs/avances/Avance_$folio.pdf',
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosaveTimer?.cancel();
     proyectoObra.dispose();
     clienteContratista.dispose();
     obraDescripcion.dispose();
@@ -251,17 +142,261 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveDraft();
+    }
+  }
+
+  void _watchController(TextEditingController controller) {
+    if (_autosaveControllers.add(controller)) {
+      controller.addListener(_scheduleAutosave);
+    }
+  }
+
+  void _watchMaterialRow(MaterialRowData row) {
+    _watchController(row.material);
+    _watchController(row.unidad);
+    _watchController(row.cantidad);
+    _watchController(row.observaciones);
+  }
+
+  void _watchAllControllers() {
+    _watchController(proyectoObra);
+    _watchController(clienteContratista);
+    _watchController(obraDescripcion);
+    _watchController(obraEspecificaciones);
+    _watchController(actividadRealizada);
+    _watchController(areaNivelObra);
+    _watchController(descripcionTrabajo);
+    _watchController(nombreTecnicoController);
+    _watchController(nombreClienteController);
+    for (final row in materiales) {
+      _watchMaterialRow(row);
+    }
+  }
+
+  void _scheduleAutosave() {
+    if (_isRestoringDraft) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 900), () {
+      _saveDraft();
+    });
+  }
+
+  Map<String, dynamic> _buildDraftMap() => {
+        'version': 1,
+        'savedAt': DateTime.now().toIso8601String(),
+        'folioActual': folioActual,
+        'proyectoObra': proyectoObra.text,
+        'clienteContratista': clienteContratista.text,
+        'obraDescripcion': obraDescripcion.text,
+        'obraEspecificaciones': obraEspecificaciones.text,
+        'actividadRealizada': actividadRealizada.text,
+        'areaNivelObra': areaNivelObra.text,
+        'descripcionTrabajo': descripcionTrabajo.text,
+        'nombreTecnico': nombreTecnicoController.text,
+        'nombreCliente': nombreClienteController.text,
+        'materiales': materiales.map((m) => m.toMap()).toList(),
+      };
+
+  bool _isFormBasicallyEmpty() {
+    if (proyectoObra.text.trim().isNotEmpty) return false;
+    if (clienteContratista.text.trim().isNotEmpty) return false;
+    if (obraDescripcion.text.trim().isNotEmpty) return false;
+    if (obraEspecificaciones.text.trim().isNotEmpty) return false;
+    if (actividadRealizada.text.trim().isNotEmpty) return false;
+    if (areaNivelObra.text.trim().isNotEmpty) return false;
+    if (descripcionTrabajo.text.trim().isNotEmpty) return false;
+    if (nombreTecnicoController.text.trim().isNotEmpty) return false;
+    if (nombreClienteController.text.trim().isNotEmpty) return false;
+    if (fotosInicio.isNotEmpty || fotosDurante.isNotEmpty || fotosDespues.isNotEmpty) {
+      return false;
+    }
+    if (firmaTecnico != null || firmaCliente != null) return false;
+    return !materiales.any((m) =>
+        m.material.text.trim().isNotEmpty ||
+        m.unidad.text.trim().isNotEmpty ||
+        m.cantidad.text.trim().isNotEmpty ||
+        m.observaciones.text.trim().isNotEmpty);
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_draftKey, jsonEncode(_buildDraftMap()));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _readDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.trim().isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return decoded.cast<String, dynamic>();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
+  }
+
+  Future<void> _applyDraft(Map<String, dynamic> draft) async {
+    _isRestoringDraft = true;
+    try {
+      proyectoObra.text = (draft['proyectoObra'] ?? '').toString();
+      clienteContratista.text = (draft['clienteContratista'] ?? '').toString();
+      obraDescripcion.text = (draft['obraDescripcion'] ?? '').toString();
+      obraEspecificaciones.text = (draft['obraEspecificaciones'] ?? '').toString();
+      actividadRealizada.text = (draft['actividadRealizada'] ?? '').toString();
+      areaNivelObra.text = (draft['areaNivelObra'] ?? '').toString();
+      descripcionTrabajo.text = (draft['descripcionTrabajo'] ?? '').toString();
+      nombreTecnicoController.text = (draft['nombreTecnico'] ?? '').toString();
+      nombreClienteController.text = (draft['nombreCliente'] ?? '').toString();
+
+      for (final row in materiales) {
+        row.dispose();
+      }
+      materiales.clear();
+
+      final materialesDraft = draft['materiales'] is List ? draft['materiales'] as List : <dynamic>[];
+      if (materialesDraft.isEmpty) {
+        final row = MaterialRowData();
+        materiales.add(row);
+        _watchMaterialRow(row);
+      } else {
+        for (final item in materialesDraft) {
+          final row = MaterialRowData();
+          materiales.add(row);
+          _watchMaterialRow(row);
+          if (item is Map) {
+            final map = item.cast<String, dynamic>();
+            row.material.text = (map['material'] ?? '').toString();
+            row.unidad.text = (map['unidad'] ?? '').toString();
+            row.cantidad.text = (map['cantidad'] ?? '').toString();
+            row.observaciones.text = (map['observaciones'] ?? '').toString();
+          }
+        }
+      }
+    } finally {
+      _isRestoringDraft = false;
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _maybeRestoreDraft() async {
+    final draft = await _readDraft();
+    if (draft == null || !mounted) return;
+
+    if (_isFormBasicallyEmpty()) {
+      await _applyDraft(draft);
+      return;
+    }
+
+    final savedAt = (draft['savedAt'] ?? '').toString();
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Borrador detectado'),
+        content: Text(
+          savedAt.isNotEmpty
+              ? 'Hay un borrador de avances guardado ($savedAt). ¿Deseas restaurarlo?'
+              : 'Hay un borrador de avances guardado. ¿Deseas restaurarlo?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(false);
+              _clearDraft();
+            },
+            child: const Text('Descartar', style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+
+    if (restore == true) {
+      await _applyDraft(draft);
+    }
+  }
+
+  void _limpiarFormulario() {
+    proyectoObra.clear();
+    clienteContratista.clear();
+    obraDescripcion.clear();
+    obraEspecificaciones.clear();
+    fotosInicio.clear();
+    fotosDurante.clear();
+    fotosDespues.clear();
+    actividadRealizada.clear();
+    areaNivelObra.clear();
+    descripcionTrabajo.clear();
+    firmaTecnico = null;
+    firmaCliente = null;
+    firmaTecnicoController.clear();
+    firmaClienteController.clear();
+    nombreTecnicoController.clear();
+    nombreClienteController.clear();
+
+    for (final row in materiales) {
+      row.dispose();
+    }
+    materiales
+      ..clear()
+      ..add(MaterialRowData());
+    _watchMaterialRow(materiales.first);
+    _clearDraft();
+  }
+
+  static Uint8List _downscaleJpeg(Uint8List bytes) {
+    try {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return bytes;
+      final maxSide = decoded.width > decoded.height ? decoded.width : decoded.height;
+      if (maxSide <= 1280) {
+        return Uint8List.fromList(
+          img.encodeJpg(decoded, quality: _jpegQuality),
+        );
+      }
+      final ratio = 1280 / maxSide;
+      final newWidth = (decoded.width * ratio).round();
+      final newHeight = (decoded.height * ratio).round();
+      final resized = img.copyResize(
+        decoded,
+        width: newWidth,
+        height: newHeight,
+      );
+      return Uint8List.fromList(img.encodeJpg(resized, quality: _jpegQuality));
+    } catch (_) {
+      return bytes;
+    }
+  }
+
   String? _validar() {
     if (proyectoObra.text.trim().isEmpty) return 'Proyecto/Obra es obligatorio';
-    if (clienteContratista.text.trim().isEmpty) {
-      return 'Cliente/Contratista es obligatorio';
-    }
-    if (actividadRealizada.text.trim().isEmpty) {
-      return 'Actividad realizada es obligatorio';
-    }
-    if (areaNivelObra.text.trim().isEmpty) {
-      return 'Área/Nivel de obra es obligatorio';
-    }
+    if (clienteContratista.text.trim().isEmpty) return 'Cliente/Contratista es obligatorio';
+    if (actividadRealizada.text.trim().isEmpty) return 'Actividad realizada es obligatorio';
+    if (areaNivelObra.text.trim().isEmpty) return 'Área/Nivel de obra es obligatorio';
     if (firmaTecnico == null || nombreTecnicoController.text.trim().isEmpty) {
       return 'Falta firma o nombre del técnico';
     }
@@ -282,7 +417,11 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(esTecnico ? 'Firma del técnico' : 'Firma del cliente'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              title: Text(
+                esTecnico ? 'Firma del técnico' : 'Firma del cliente',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: _colorHeader),
+              ),
               content: SizedBox(
                 width: MediaQuery.of(context).size.width * 0.8,
                 child: Column(
@@ -290,14 +429,21 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                   children: [
                     TextField(
                       controller: nombreController,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
+                      decoration: const InputDecoration(labelText: 'Nombre', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       height: 200,
-                      child: Signature(
-                        controller: controller,
-                        backgroundColor: Colors.white,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Signature(
+                          controller: controller,
+                          backgroundColor: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -309,7 +455,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                     controller.clear();
                     setDialogState(() {});
                   },
-                  child: const Text('Limpiar'),
+                  child: const Text('Limpiar', style: TextStyle(color: Colors.orange)),
                 ),
                 TextButton(
                   onPressed: () async {
@@ -322,11 +468,11 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                       );
                     }
                   },
-                  child: const Text('Guardar'),
+                  child: const Text('Guardar', style: TextStyle(color: _colorAccent, fontWeight: FontWeight.bold)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
                 ),
               ],
             );
@@ -343,63 +489,82 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
           firmaCliente = result['firma'];
         }
       });
+      _scheduleAutosave();
     }
   }
 
   Future<void> _agregarFotos(List<Uint8List> destino) async {
-    final picker = ImagePicker();
-    final pickedList = await picker.pickMultiImage();
-    if (pickedList.isNotEmpty) {
-      final bytesList = await Future.wait(pickedList.map((x) => x.readAsBytes()));
+    try {
+      final picker = ImagePicker();
+      final pickedList = await picker.pickMultiImage(
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: _jpegQuality,
+      );
+      if (!mounted || pickedList.isEmpty) return;
+
+      final cupo = _maxFotosPorSeccion - destino.length;
+      if (cupo <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Límite: $_maxFotosPorSeccion fotos en esta sección.')),
+        );
+        return;
+      }
+
+      final bytesList = <Uint8List>[];
+      for (final xfile in pickedList.take(cupo)) {
+        final bytes = await xfile.readAsBytes();
+        bytesList.add(_downscaleJpeg(bytes));
+      }
+
+      if (!mounted) return;
       setState(() => destino.addAll(bytesList));
+      _scheduleAutosave();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo agregar la(s) foto(s): $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
-  Widget _seccionConTitulo(String titulo, Widget child, {IconData? icon}) {
+  Widget _seccionConTitulo(String titulo, Widget child) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: _colorCard,
-        border: Border.all(color: const Color(0xFFD5DFEC)),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x100F172A),
-            blurRadius: 14,
-            offset: Offset(0, 6),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: const BoxDecoration(
               color: _colorHeader,
               borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
               ),
             ),
-            child: Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, color: Colors.white, size: 19),
-                  const SizedBox(width: 8),
-                ],
-                Text(
-                  titulo,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
+            child: Text(
+              titulo,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
             ),
           ),
-          Padding(padding: const EdgeInsets.all(14), child: child),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: child,
+          ),
         ],
       ),
     );
@@ -407,20 +572,17 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
 
   Widget _encabezadoCafri() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F4C81), Color(0xFF155D9A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: const [
+        color: _colorCard,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x220F4C81),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -431,45 +593,41 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
             borderRadius: BorderRadius.circular(8),
             child: Image.asset(
               "lib/assets/cafrilogo.png",
-              width: 80,
-              height: 80,
+              width: 70,
+              height: 70,
               fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Container(
+                width: 70,
+                height: 70,
+                color: Colors.grey.shade200,
+                child: const Icon(Icons.image, color: Colors.grey),
+              ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
+              children: [
+                const Text(
                   'REPORTE DE AVANCES',
                   style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: _colorHeader,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'COMPANIA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                  style: TextStyle(
-                    color: Color(0xFFEAF2FF),
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
+                  'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.grey.shade800),
                 ),
-                SizedBox(height: 4),
-                Text('Telefono: (999) 102 1232', style: TextStyle(color: Color(0xFFEAF2FF))),
-                Text(
-                  'Numero de identificacion empresarial: AAF2306305G0',
-                  style: TextStyle(color: Color(0xFFEAF2FF)),
-                ),
-                Text('Email: contacto@cafrimx.com', style: TextStyle(color: Color(0xFFEAF2FF))),
-                Text(
-                  'Direccion: C. 59K N 537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230',
-                  style: TextStyle(color: Color(0xFFEAF2FF)),
-                ),
+                const SizedBox(height: 6),
+                _buildHeaderInfoRow(Icons.phone, '(999) 102 1232'),
+                _buildHeaderInfoRow(Icons.badge, 'AAF2306305G0'),
+                _buildHeaderInfoRow(Icons.email, 'contacto@cafrimx.com'),
+                _buildHeaderInfoRow(Icons.location_on, 'C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230'),
               ],
             ),
           ),
@@ -478,78 +636,14 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     );
   }
 
-  Widget _buildDatoRapido({
-    required IconData icon,
-    required String titulo,
-    required String valor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD5DFEC)),
-      ),
+  Widget _buildHeaderInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: _colorHeader, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            '$titulo: ',
-            style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1F2937)),
-          ),
-          Flexible(
-            child: Text(
-              valor,
-              style: const TextStyle(color: Color(0xFF475569)),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _firmaCard({
-    required String titulo,
-    required Uint8List? firma,
-    required TextEditingController nombreController,
-    required VoidCallback onFirmar,
-    required VoidCallback onEliminarFirma,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFCFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD5DFEC)),
-      ),
-      child: Column(
-        children: [
-          Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          if (firma != null) ...[
-            Image.memory(firma, height: 100),
-            const SizedBox(height: 8),
-            TextField(
-              controller: nombreController,
-              decoration: InputDecoration(labelText: 'Nombre del $titulo'),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onEliminarFirma,
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                label: const Text('Eliminar firma', style: TextStyle(color: Colors.red)),
-              ),
-            ),
-          ] else
-            OutlinedButton.icon(
-              onPressed: onFirmar,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Capturar firma'),
-            ),
+          Icon(icon, size: 12, color: _colorAccent),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 10, color: Colors.grey.shade600))),
         ],
       ),
     );
@@ -559,62 +653,78 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              titulo,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '(${fotos.length})',
-              style: const TextStyle(color: Color(0xFF64748B)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ...fotos.asMap().entries.map((entry) {
-              final idx = entry.key;
-              final imgBytes = entry.value;
-              return Stack(
-                alignment: Alignment.topRight,
-                children: [
-                  ClipRRect(
+        Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, color: _colorHeader, fontSize: 14)),
+        const SizedBox(height: 10),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+          ),
+          itemCount: fotos.length + 1,
+          itemBuilder: (context, idx) {
+            if (idx == fotos.length) {
+              return GestureDetector(
+                onTap: () => _agregarFotos(fotos),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      imgBytes,
-                      width: 90,
-                      height: 90,
-                      fit: BoxFit.cover,
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: const Icon(Icons.add_a_photo, size: 24, color: _colorAccent),
+                ),
+              );
+            }
+            final imgBytes = fotos[idx];
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(imgBytes, fit: BoxFit.cover),
+                  ),
+                ),
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() => fotos.removeAt(idx));
+                      _scheduleAutosave();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.cancel, color: Colors.red, size: 18),
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                    onPressed: () => setState(() => fotos.removeAt(idx)),
-                  ),
-                ],
-              );
-            }),
-            GestureDetector(
-              onTap: () => _agregarFotos(fotos),
-              child: Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFBCCBDE)),
                 ),
-                child: const Icon(Icons.add_a_photo, size: 30, color: Color(0xFF5B6C80)),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ],
+    );
+  }
+
+  InputDecoration _inputStyle(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+      floatingLabelStyle: const TextStyle(color: _colorAccent),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _colorAccent, width: 1.5),
+      ),
     );
   }
 
@@ -624,189 +734,161 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
     final fechaFormateada = '${fechaActual.day.toString().padLeft(2, '0')}/${fechaActual.month.toString().padLeft(2, '0')}/${fechaActual.year} ${fechaActual.hour.toString().padLeft(2, '0')}:${fechaActual.minute.toString().padLeft(2, '0')}';
 
     if (cargandoFolio || folioActual == null) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: _colorBg,
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator(color: _colorAccent)),
       );
     }
 
     return Scaffold(
       backgroundColor: _colorBg,
       appBar: AppBar(
-        title: const Text('Reporte de Avances'),
+        title: const Text('Reporte de Avances', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
         backgroundColor: _colorHeader,
-        foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SafeArea(
         child: SingleChildScrollView(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1000),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _encabezadoCafri(),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _colorCard,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _encabezadoCafri(),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+                    Row(
                       children: [
-                        _buildDatoRapido(
-                          icon: Icons.tag_outlined,
-                          titulo: 'Folio',
-                          valor: '${folioActual!}',
-                        ),
-                        _buildDatoRapido(
-                          icon: Icons.calendar_month_outlined,
-                          titulo: 'Fecha',
-                          valor: fechaFormateada,
-                        ),
+                        const Text('Folio: ', style: TextStyle(fontWeight: FontWeight.bold, color: _colorHeader, fontSize: 14)),
+                        Text('$folioActual', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    Text('Fecha: $fechaFormateada', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
               _seccionConTitulo(
                 '1. Datos generales',
-                icon: Icons.assignment_ind_outlined,
                 Column(
                   children: [
-                    TextField(
-                      controller: proyectoObra,
-                      decoration: const InputDecoration(labelText: 'Proyecto/Obra'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: clienteContratista,
-                      decoration: const InputDecoration(labelText: 'Cliente/Contratista'),
-                    ),
+                    TextField(controller: proyectoObra, decoration: _inputStyle('Proyecto/Obra')),
+                    const SizedBox(height: 12),
+                    TextField(controller: clienteContratista, decoration: _inputStyle('Cliente/Contratista')),
                   ],
                 ),
               ),
               _seccionConTitulo(
                 '2. Obra',
-                icon: Icons.construction_outlined,
                 Column(
                   children: [
-                    TextField(
-                      controller: obraDescripcion,
-                      decoration: const InputDecoration(labelText: 'Descripción de la obra'),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: obraEspecificaciones,
-                      decoration: const InputDecoration(labelText: 'Especificaciones técnicas'),
-                      maxLines: 3,
-                    ),
+                    TextField(controller: obraDescripcion, decoration: _inputStyle('Descripción de la obra'), maxLines: 3),
+                    const SizedBox(height: 12),
+                    TextField(controller: obraEspecificaciones, decoration: _inputStyle('Especificaciones técnicas'), maxLines: 3),
                   ],
                 ),
               ),
               _seccionConTitulo(
                 '3. Avances (fotos)',
-                icon: Icons.photo_library_outlined,
                 Column(
                   children: [
                     _fotosSeccion('Inicio', fotosInicio),
-                    const SizedBox(height: 12),
+                    const Divider(height: 24),
                     _fotosSeccion('Durante', fotosDurante),
-                    const SizedBox(height: 12),
+                    const Divider(height: 24),
                     _fotosSeccion('Después', fotosDespues),
                   ],
                 ),
               ),
               _seccionConTitulo(
                 '4. Reporte del día',
-                icon: Icons.summarize_outlined,
                 Column(
                   children: [
-                    TextField(
-                      controller: actividadRealizada,
-                      decoration: const InputDecoration(labelText: 'Actividad realizada'),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: areaNivelObra,
-                      decoration: const InputDecoration(labelText: 'Área/Nivel de obra'),
-                    ),
+                    TextField(controller: actividadRealizada, decoration: _inputStyle('Actividad realizada'), maxLines: 2),
+                    const SizedBox(height: 12),
+                    TextField(controller: areaNivelObra, decoration: _inputStyle('Área/Nivel de obra')),
                   ],
                 ),
               ),
               _seccionConTitulo(
                 '5. Resumen de materiales utilizados',
-                icon: Icons.inventory_2_outlined,
                 Column(
                   children: [
-                    Row(
-                      children: const [
-                        Expanded(child: Text('Material', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 8),
-                        SizedBox(width: 90, child: Text('Unidad', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 8),
-                        SizedBox(width: 90, child: Text('Cantidad', style: TextStyle(fontWeight: FontWeight.bold))),
-                        SizedBox(width: 8),
-                        Expanded(child: Text('Observaciones', style: TextStyle(fontWeight: FontWeight.bold))),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ...materiales.asMap().entries.map(
-                      (e) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ...materiales.asMap().entries.map((e) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: TextField(
-                                controller: e.value.material,
-                                decoration: const InputDecoration(hintText: 'Material o insumo'),
-                              ),
+                            Row(
+                              children: [
+                                Expanded(child: TextField(controller: e.value.material, decoration: _inputStyle('Material'))),
+                                const SizedBox(width: 8),
+                                SizedBox(width: 100, child: TextField(controller: e.value.unidad, decoration: _inputStyle('Unidad'))),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 90,
-                              child: TextField(
-                                controller: e.value.unidad,
-                                decoration: const InputDecoration(hintText: 'Unidad'),
-                              ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 100,
+                                  child: TextField(
+                                    controller: e.value.cantidad,
+                                    decoration: _inputStyle('Cant.'),
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: TextField(controller: e.value.observaciones, decoration: _inputStyle('Observaciones'))),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () {
+                                    setState(() {
+                                      if (materiales.length > 1) {
+                                        final row = materiales.removeAt(e.key);
+                                        row.dispose();
+                                      }
+                                    });
+                                    _scheduleAutosave();
+                                  },
+                                )
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 90,
-                              child: TextField(
-                                controller: e.value.cantidad,
-                                decoration: const InputDecoration(hintText: 'Cantidad'),
-                                keyboardType: TextInputType.number,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: e.value.observaciones,
-                                decoration: const InputDecoration(hintText: 'Observaciones'),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () {
-                                setState(() {
-                                  if (materiales.length > 1) {
-                                    final row = materiales.removeAt(e.key);
-                                    row.dispose();
-                                  }
-                                });
-                              },
-                            )
                           ],
                         ),
-                      ),
-                    ),
+                      );
+                    }),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () => setState(() => materiales.add(MaterialRowData())),
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Agregar material'),
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final row = MaterialRowData();
+                          _watchMaterialRow(row);
+                          setState(() => materiales.add(row));
+                          _scheduleAutosave();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _colorAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Agregar material', style: TextStyle(fontSize: 13)),
                       ),
                     )
                   ],
@@ -814,61 +896,35 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
               ),
               _seccionConTitulo(
                 '6. Descripción del trabajo',
-                icon: Icons.description_outlined,
-                TextField(
-                  controller: descripcionTrabajo,
-                  decoration: const InputDecoration(hintText: 'Describe el trabajo realizado'),
-                  maxLines: 4,
-                ),
+                TextField(controller: descripcionTrabajo, decoration: _inputStyle('Describe el trabajo realizado'), maxLines: 4),
               ),
               _seccionConTitulo(
                 '7. Firmas',
-                icon: Icons.draw_outlined,
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+                Row(
                   children: [
-                    SizedBox(
-                      width: 420,
-                      child: _firmaCard(
-                        titulo: 'tecnico',
-                        firma: firmaTecnico,
-                        nombreController: nombreTecnicoController,
-                        onFirmar: () => _tomarFirmas(esTecnico: true),
-                        onEliminarFirma: () => setState(() => firmaTecnico = null),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 420,
-                      child: _firmaCard(
-                        titulo: 'cliente',
-                        firma: firmaCliente,
-                        nombreController: nombreClienteController,
-                        onFirmar: () => _tomarFirmas(esTecnico: false),
-                        onEliminarFirma: () => setState(() => firmaCliente = null),
-                      ),
-                    ),
+                    Expanded(child: _buildFirmaWidget(esTecnico: true, bytes: firmaTecnico, nombre: nombreTecnicoController.text)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _buildFirmaWidget(esTecnico: false, bytes: firmaCliente, nombre: nombreClienteController.text)),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Center(
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.picture_as_pdf),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _colorAccent,
+                    backgroundColor: _colorHeader,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w700),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 2,
                   ),
-                  label: const Text('Guardar y enviar PDF'),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('GUARDAR COMO PDF', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.5)),
                   onPressed: () async {
                     final validation = _validar();
                     if (validation != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(validation)),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(validation)));
                       return;
                     }
 
@@ -878,20 +934,13 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                         title: const Text('Confirmar generación de PDF'),
                         content: const Text('¿Deseas generar y enviar el PDF?'),
                         actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            child: const Text('Cancelar'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            child: const Text('Sí, continuar'),
-                          ),
+                          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
+                          ElevatedButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Sí, continuar')),
                         ],
                       ),
                     );
                     if (confirm != true) return;
 
-                    // Mostrar indicador de progreso
                     if (!mounted) return;
                     showDialog(
                       context: context,
@@ -902,7 +951,7 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              CircularProgressIndicator(),
+                              CircularProgressIndicator(color: _colorAccent),
                               SizedBox(height: 16),
                               Text('Generando y enviando PDF...'),
                             ],
@@ -936,162 +985,52 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                         logoBytes: logoBytes,
                       );
 
-                      // Validar que el PDF se generó correctamente
                       if (bytes.isEmpty) {
                         throw Exception('El PDF generado está vacío');
                       }
 
-                      String? pdfUrl;
+                      String? localPdfPath;
+                      String? localPdfError;
                       try {
-                        final result = await subirPdfAvances(
+                        localPdfPath = await guardarCopiaPdfEnTelefono(
+                          pdfBytes: bytes,
+                          fileName: 'Avance_$folioParaPDF.pdf',
+                        );
+                      } catch (e) {
+                        localPdfError = e.toString();
+                      }
+
+                      try {
+                        await subirPdfAvances(
                           bytes,
                           folioParaPDF,
                           nombreCliente: clienteContratista.text,
                         );
-                        if (result.status == PdfSendStatus.queued) {
-                          if (mounted) {
-                            Navigator.of(context)
-                                .pop(); // Cerrar diálogo de progreso
-                          }
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(result.message),
-                              backgroundColor: Colors.orange,
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                          return;
-                        }
-                        pdfUrl = result.downloadUrl;
                       } catch (e) {
-                        // Error al subir, pero puede estar en cola
                         final errorMsg = e.toString();
-                        if (mounted) {
-                          Navigator.of(context).pop(); // Cerrar diálogo de progreso
-                        }
+                        if (mounted) Navigator.of(context).pop();
                         
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(errorMsg),
+                            content: Text(localPdfPath != null ? '$errorMsg\nCopia local: $localPdfPath' : '$errorMsg\nNo se pudo guardar copia local: $localPdfError'),
                             backgroundColor: Colors.orange,
-                            duration: const Duration(seconds: 4),
+                            duration: const Duration(seconds: 6),
                           ),
                         );
                         return;
                       }
 
-                      if (pdfUrl != null) {
-                        Map<String, List<String>> fotosUrls = {
-                          'inicio': const [],
-                          'durante': const [],
-                          'despues': const [],
-                        };
-                        Map<String, List<String>> fotosThumbUrls = {
-                          'inicio': const [],
-                          'durante': const [],
-                          'despues': const [],
-                        };
-                        Map<String, String> firmasUrls = {};
-
-                        try {
-                          final inicio = await _subirFotosLote(
-                            folio: folioParaPDF,
-                            seccion: 'inicio',
-                            fotos: fotosInicio,
-                          );
-                          final durante = await _subirFotosLote(
-                            folio: folioParaPDF,
-                            seccion: 'durante',
-                            fotos: fotosDurante,
-                          );
-                          final despues = await _subirFotosLote(
-                            folio: folioParaPDF,
-                            seccion: 'despues',
-                            fotos: fotosDespues,
-                          );
-
-                          fotosUrls = {
-                            'inicio': inicio.$1,
-                            'durante': durante.$1,
-                            'despues': despues.$1,
-                          };
-                          fotosThumbUrls = {
-                            'inicio': inicio.$2,
-                            'durante': durante.$2,
-                            'despues': despues.$2,
-                          };
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'PDF subido, pero no se pudieron subir las fotos: $e',
-                                ),
-                                backgroundColor: Colors.orange,
-                                duration: const Duration(seconds: 4),
-                              ),
-                            );
-                          }
-                        }
-
-                        try {
-                          firmasUrls = await _subirFirmas(
-                            folio: folioParaPDF,
-                            firmaTecnicoBytes: firmaTecnico!,
-                            firmaClienteBytes: firmaCliente!,
-                          );
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'PDF subido, pero no se pudieron subir las firmas: $e',
-                                ),
-                                backgroundColor: Colors.orange,
-                                duration: const Duration(seconds: 4),
-                              ),
-                            );
-                          }
-                        }
-
-                        try {
-                          await _guardarFormularioAvances(
-                            folio: folioParaPDF,
-                            fechaFormateada: fechaFormateada,
-                            pdfUrl: pdfUrl,
-                            fotosUrls: fotosUrls,
-                            fotosThumbUrls: fotosThumbUrls,
-                            firmasUrls: firmasUrls,
-                          );
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'PDF subido, pero no se pudo guardar el formulario: $e',
-                                ),
-                                backgroundColor: Colors.orange,
-                                duration: const Duration(seconds: 4),
-                              ),
-                            );
-                          }
-                        }
-                      }
-
                       await FolioService.updateFolio(folioParaPDF);
                       
-                      if (mounted) {
-                        Navigator.of(context).pop(); // Cerrar diálogo de progreso
-                      }
+                      if (mounted) Navigator.of(context).pop();
 
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('✓ PDF enviado exitosamente\nFolio: $folioParaPDF'),
+                          content: Text(localPdfPath != null ? '✓ PDF enviado exitosamente\nFolio: $folioParaPDF\nCopia local: $localPdfPath' : '✓ PDF enviado exitosamente\nFolio: $folioParaPDF'),
                           backgroundColor: Colors.green,
-                          duration: const Duration(seconds: 3),
+                          duration: const Duration(seconds: 5),
                         ),
                       );
 
@@ -1105,17 +1044,10 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
                         name: 'Avance($folioParaPDF).pdf',
                       );
                     } catch (e) {
-                      if (mounted) {
-                        Navigator.of(context).pop(); // Cerrar diálogo de progreso
-                      }
-                      
+                      if (mounted) Navigator.of(context).pop();
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error: ${e.toString()}'),
-                          backgroundColor: Colors.red,
-                          duration: const Duration(seconds: 4),
-                        ),
+                        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
                       );
                     }
                   },
@@ -1125,8 +1057,61 @@ class _FormularioAvancesPDFState extends State<FormularioAvancesPDF> {
           ),
         ),
       ),
-    ),
-  ),
+    );
+  }
+
+  Widget _buildFirmaWidget({required bool esTecnico, required Uint8List? bytes, required String nombre}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Text(
+            esTecnico ? 'Técnico' : 'Cliente',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: _colorHeader, fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          if (bytes != null) ...[
+            Container(
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Image.memory(bytes, fit: BoxFit.contain),
+            ),
+            const SizedBox(height: 6),
+            Text(nombre, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  if (esTecnico) {
+                    firmaTecnico = null;
+                  } else {
+                    firmaCliente = null;
+                  }
+                });
+                _scheduleAutosave();
+              },
+              child: const Text('Eliminar', style: TextStyle(color: Colors.red, fontSize: 12)),
+            )
+          ] else
+            OutlinedButton.icon(
+              onPressed: () => _tomarFirmas(esTecnico: esTecnico),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: _colorAccent),
+                foregroundColor: _colorAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Firmar', style: TextStyle(fontSize: 12)),
+            ),
+        ],
       ),
     );
   }
@@ -1153,62 +1138,11 @@ class PdfAvancesGenerator {
     required String nombreCliente,
     required Uint8List logoBytes,
   }) async {
-    final fontData = await rootBundle.load(
-      'packages/syncfusion_flutter_pdfviewer/assets/fonts/RobotoMono-Regular.ttf',
-    );
-    final baseFont = pw.Font.ttf(fontData);
-    final theme = pw.ThemeData.withFont(
-      base: baseFont,
-      bold: baseFont,
-    );
-    final pdf = pw.Document(theme: theme);
-    final headerColor = PdfColor.fromInt(0xFF0F4C81);
-    final borderColor = PdfColor.fromInt(0xFFD5DFEC);
-    final lightBg = PdfColor.fromInt(0xFFF8FAFD);
-
-    pw.Widget buildPdfTitulo(String titulo) {
-      return pw.Container(
-        width: double.infinity,
-        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: pw.BoxDecoration(
-          color: headerColor,
-          borderRadius: pw.BorderRadius.circular(6),
-        ),
-        child: pw.Text(
-          titulo.toUpperCase(),
-          style: pw.TextStyle(
-            color: PdfColors.white,
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 12,
-          ),
-        ),
-      );
-    }
-
-    pw.Widget buildCardSection(String titulo, List<pw.Widget> children) {
-      return pw.Container(
-        margin: const pw.EdgeInsets.only(bottom: 10),
-        decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: borderColor),
-          borderRadius: pw.BorderRadius.circular(8),
-        ),
-        child: pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              buildPdfTitulo(titulo),
-              pw.SizedBox(height: 6),
-              ...children,
-            ],
-          ),
-        ),
-      );
-    }
+    final pdf = pw.Document();
 
     pw.Widget buildFotoGrid(String titulo, List<Uint8List> fotos) {
       return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(titulo, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 6),
@@ -1232,7 +1166,7 @@ class PdfAvancesGenerator {
 
     pw.TableRow buildHeaderRow(List<String> headers) {
       return pw.TableRow(
-        decoration: pw.BoxDecoration(color: lightBg),
+        decoration: const pw.BoxDecoration(color: PdfColors.grey300),
         children: headers
             .map((h) => pw.Padding(
                   padding: const pw.EdgeInsets.all(4),
@@ -1246,12 +1180,11 @@ class PdfAvancesGenerator {
       pw.MultiPage(
         build: (context) => [
           pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Container(
-                width: 62,
-                height: 62,
-                padding: const pw.EdgeInsets.only(top: 6),
+                width: 80,
+                height: 80,
                 child: pw.Image(pw.MemoryImage(logoBytes), fit: pw.BoxFit.contain),
               ),
               pw.SizedBox(width: 16),
@@ -1263,20 +1196,20 @@ class PdfAvancesGenerator {
                       'HOJA DE SERVICIO',
                       style: pw.TextStyle(
                         fontWeight: pw.FontWeight.bold,
-                        fontSize: 17,
+                        fontSize: 18,
                         letterSpacing: 1.2,
                       ),
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
                       'COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V.',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5),
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 15),
                     ),
                     pw.SizedBox(height: 4),
-                    pw.Text('Teléfono: (999) 102 1232', style: const pw.TextStyle(fontSize: 8.5)),
-                    pw.Text('Número de identificación empresarial: AAF2306305G0', style: const pw.TextStyle(fontSize: 8.5)),
-                    pw.Text('Email: contacto@cafrimx.com', style: const pw.TextStyle(fontSize: 8.5)),
-                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230', style: const pw.TextStyle(fontSize: 8.5)),
+                    pw.Text('Teléfono: (999) 102 1232'),
+                    pw.Text('Número de identificación empresarial: AAF2306305G0'),
+                    pw.Text('Email: contacto@cafrimx.com'),
+                    pw.Text('Dirección: C. 59K N°537 POR 112 Y 114 COL. BOJORQUEZ C.P 97230'),
                   ],
                 ),
               ),
@@ -1285,104 +1218,96 @@ class PdfAvancesGenerator {
           pw.SizedBox(height: 8),
           pw.Divider(),
 
-          buildCardSection(
-            '1. Datos generales',
-            [
-              pw.Text('Proyecto/Obra: $proyectoObra'),
-              pw.Text('Cliente/Contratista: $clienteContratista'),
-            ],
-          ),
-          buildCardSection(
-            '2. Obra',
-            [
-              pw.Text('Descripci�n: '),
-              pw.SizedBox(height: 4),
-              pw.Text('Especificaciones t�cnicas: '),
-            ],
-          ),
-          buildCardSection(
-            '3. Avances (fotos)',
-            [
-              buildFotoGrid('Inicio', fotosInicio),
-              pw.SizedBox(height: 6),
-              buildFotoGrid('Durante', fotosDurante),
-              pw.SizedBox(height: 6),
-              buildFotoGrid('Despu�s', fotosDespues),
-            ],
-          ),
-          buildCardSection(
-            '4. Reporte del d�a',
-            [
-              pw.Text('Actividad realizada: '),
-              pw.Text('�rea/Nivel de obra: '),
-            ],
-          ),
-          buildCardSection(
-            '5. Resumen de materiales utilizados',
-            [
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey400),
-                children: [
-                  buildHeaderRow(['Material', 'Unidad', 'Cantidad', 'Observaciones']),
-                  ...materiales.map(
-                    (m) => pw.TableRow(
-                      children: [
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['material'] ?? '')),
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['unidad'] ?? '')),
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['cantidad'] ?? '')),
-                        pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['observaciones'] ?? '')),
-                      ],
-                    ),
-                  ),
-                ],
+          pw.Text('1. Datos generales', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('Proyecto/Obra: $proyectoObra'),
+          pw.Text('Cliente/Contratista: $clienteContratista'),
+          pw.SizedBox(height: 12),
+
+          pw.Text('2. Obra', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('Descripción: $obraDescripcion'),
+          pw.SizedBox(height: 4),
+          pw.Text('Especificaciones técnicas: $obraEspecificaciones'),
+          pw.SizedBox(height: 12),
+
+          pw.Text('3. Avances (fotos)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 6),
+          buildFotoGrid('Inicio', fotosInicio),
+          pw.SizedBox(height: 6),
+          buildFotoGrid('Durante', fotosDurante),
+          pw.SizedBox(height: 6),
+          buildFotoGrid('Después', fotosDespues),
+          pw.SizedBox(height: 12),
+
+          pw.Text('4. Reporte del día', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('Actividad realizada: $actividadRealizada'),
+          pw.Text('Área/Nivel de obra: $areaNivelObra'),
+          pw.SizedBox(height: 12),
+
+          pw.Text('5. Resumen de materiales utilizados', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 6),
+          pw.Table(
+            border: pw.TableBorder.all(),
+            children: [
+              buildHeaderRow(['Material', 'Unidad', 'Cantidad', 'Observaciones']),
+              ...materiales.map(
+                (m) => pw.TableRow(
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['material'] ?? '')),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['unidad'] ?? '')),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['cantidad'] ?? '')),
+                    pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(m['observaciones'] ?? '')),
+                  ],
+                ),
               ),
             ],
           ),
-          buildCardSection(
-            '6. Descripci�n del trabajo',
-            [
-              pw.Text(descripcionTrabajo),
-            ],
-          ),
-          buildCardSection(
-            '7. Firmas',
-            [
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: pw.Column(
-                      children: [
-                        pw.Text('T�cnico', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 4),
-                        pw.Image(pw.MemoryImage(firmaTecnico), height: 80),
-                        pw.SizedBox(height: 4),
-                        pw.Text(nombreTecnico),
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(width: 12),
-                  pw.Expanded(
-                    child: pw.Column(
-                      children: [
-                        pw.Text('Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 4),
-                        pw.Image(pw.MemoryImage(firmaCliente), height: 80),
-                        pw.SizedBox(height: 4),
-                        pw.Text(nombreCliente),
-                      ],
-                    ),
-                  ),
-                ],
+          pw.SizedBox(height: 12),
+
+          pw.Text('6. Descripción del trabajo', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text(descripcionTrabajo),
+          pw.SizedBox(height: 12),
+
+          pw.Text('7. Firmas', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.Row(
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  children: [
+                    pw.Text('Técnico', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    pw.Image(pw.MemoryImage(firmaTecnico), height: 80),
+                    pw.SizedBox(height: 4),
+                    pw.Text(nombreTecnico),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                child: pw.Column(
+                  children: [
+                    pw.Text('Cliente', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    pw.Image(pw.MemoryImage(firmaCliente), height: 80),
+                    pw.SizedBox(height: 4),
+                    pw.Text(nombreCliente),
+                  ],
+                ),
               ),
             ],
           ),
-pw.Text(
+          pw.SizedBox(height: 12),
+          pw.Text(
             'En CAFRI, estamos comprometidos con la reducción del uso de papel y trabajamos continuamente para ser más amigables con el medio ambiente. '
             'Nos esforzamos en la mejora constante y la actualización de nuestros sistemas para minimizar nuestro impacto ecológico.\n\n'
             '(999) 102 1232 / (999) 490 1637   cafrimx.com\n\n'
             'Este documento es propiedad de la empresa CAFRI COMPAÑÍA DE AIRE ACONDICIONADO Y FRIGORIFICOS DEL SURESTE S.A. DE C.V. con domicilio en Calle 59 K, 537 Cp. 97230 en la ciudad de Mérida, Yucatán, '
             'por lo que queda prohibida la reproducción parcial o total de este documento y se tomarán acciones legales.',
-            style: pw.TextStyle(fontSize: 9),
+            style: pw.TextStyle(fontSize: 10),
             textAlign: pw.TextAlign.center,
           ),
         ],

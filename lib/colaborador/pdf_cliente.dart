@@ -1,7 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, unnecessary_nullable_for_final_variable_declarations
 
 import 'dart:typed_data';
-import 'dart:async';
 import 'package:cafri/helpers/upload_pdf_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -868,16 +867,14 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     hojas: hojasList,
                     fechaFormateada: fechaFormateada,
                     logoBytes: logoUint8List,
-                  ).timeout(const Duration(seconds: 45));
-
-                                    final sendResult = await subirPdfTarea(
-                    pdfBytes,
-                    folioParaPDF,
-                    nombreCliente: campoNombreCliente.text,
                   );
 
-                  if (!mounted) return;
-                  if (sendResult.status == PdfSendStatus.uploaded) {
+                  try {
+                    await subirPdfTarea(
+                      pdfBytes,
+                      folioParaPDF,
+                      nombreCliente: campoNombreCliente.text,
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
@@ -886,16 +883,23 @@ class _FormularioPDFState extends State<FormularioPDF> {
                         backgroundColor: Colors.green,
                       ),
                     );
-                  } else {
+                  } catch (e) {
+                    // Si hay error de conexión, el PDF se guarda en la cola
+                    String mensaje = e.toString();
+                    if (mensaje.contains('Sin conexión')) {
+                      mensaje =
+                          'Sin conexión: PDF guardado en la cola. Puedes enviarlo después.';
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(sendResult.message),
+                        content: Text(mensaje),
                         backgroundColor: Colors.orange,
                         duration: const Duration(seconds: 4),
                       ),
                     );
                   }
-// Folio already incremented atomically at load
+
+                  // Folio already incremented atomically at load
                   setState(() {
                     folioActual = folioParaPDF + 1;
                     _limpiarFormulario();
@@ -1325,4 +1329,3 @@ class PdfGenerator {
 }
 
 //las imagenes multiple seleccion
-

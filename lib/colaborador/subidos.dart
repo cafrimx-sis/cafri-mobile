@@ -70,12 +70,6 @@ class _SubidosScreenState extends State<SubidosScreen> {
         }
       }
 
-
-      // Si ya existe en Storage, reasignar para no sobrescribir.
-      if (await existePdfTareaEnStorage(folioAEnviar)) {
-        folioAEnviar = await FolioService.getAndUpdateFolio();
-      }
-
       // Verificar si el folio ya fue procesado
       final yaFueProcesado = await FolioService.folioYaFueProcesado(
         folioAEnviar,
@@ -97,38 +91,22 @@ class _SubidosScreenState extends State<SubidosScreen> {
         }
 
         // Intentar subir con nuevo folio
-        final sendResult = await subirPdfTarea(
-          item.pdfBytes,
-          nuevoFolio,
-          nombreCliente: item.nombreCliente,
-        );
-        if (sendResult.status != PdfSendStatus.uploaded) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(sendResult.message),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-          _loadPendingPdfs();
-          setState(() {
-            _isSending = false;
-          });
-          return;
+        if (item.tipo == 'Avance') {
+          await subirPdfAvances(item.pdfBytes, nuevoFolio, nombreCliente: item.nombreCliente);
+        } else {
+          await subirPdfTarea(item.pdfBytes, nuevoFolio, nombreCliente: item.nombreCliente);
         }
 
         // Asegurar que el folio en la config no disminuya
         await FolioService.updateFolio(nuevoFolio);
 
         // Eliminar la copia local (la que tenía el folio antiguo)
-        await _queueService.removePdfFromQueue(item.folio);
+        await _queueService.removePdfFromQueue(item.folio, tipo: item.tipo);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('PDF enviado como Tarea $nuevoFolio'),
+              content: Text('PDF enviado como ${item.tipo} $nuevoFolio'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -144,38 +122,22 @@ class _SubidosScreenState extends State<SubidosScreen> {
       }
 
       // Enviar PDF con folioAEnviar
-      final sendResult = await subirPdfTarea(
-        item.pdfBytes,
-        folioAEnviar,
-        nombreCliente: item.nombreCliente,
-      );
-      if (sendResult.status != PdfSendStatus.uploaded) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(sendResult.message),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-        _loadPendingPdfs();
-        setState(() {
-          _isSending = false;
-        });
-        return;
+      if (item.tipo == 'Avance') {
+        await subirPdfAvances(item.pdfBytes, folioAEnviar, nombreCliente: item.nombreCliente);
+      } else {
+        await subirPdfTarea(item.pdfBytes, folioAEnviar, nombreCliente: item.nombreCliente);
       }
 
       // Actualizar folio de forma segura (atómica)
       await FolioService.updateFolio(folioAEnviar);
 
       // Eliminar de la cola
-      await _queueService.removePdfFromQueue(item.folio);
+      await _queueService.removePdfFromQueue(item.folio, tipo: item.tipo);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('PDF Tarea $folioAEnviar enviado correctamente'),
+            content: Text('PDF ${item.tipo} $folioAEnviar enviado correctamente'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -251,17 +213,13 @@ class _SubidosScreenState extends State<SubidosScreen> {
             // Reasignar folio de forma atómica y subir con el nuevo folio
             try {
               final nuevoFolio = await FolioService.getAndUpdateFolio();
-              final sendResult = await subirPdfTarea(
-                item.pdfBytes,
-                nuevoFolio,
-                nombreCliente: item.nombreCliente,
-              );
-              if (sendResult.status != PdfSendStatus.uploaded) {
-                errores++;
-                continue;
+              if (item.tipo == 'Avance') {
+                await subirPdfAvances(item.pdfBytes, nuevoFolio, nombreCliente: item.nombreCliente);
+              } else {
+                await subirPdfTarea(item.pdfBytes, nuevoFolio, nombreCliente: item.nombreCliente);
               }
               await FolioService.updateFolio(nuevoFolio);
-              await _queueService.removePdfFromQueue(item.folio);
+              await _queueService.removePdfFromQueue(item.folio, tipo: item.tipo);
               enviados++;
               continue;
             } catch (e) {
@@ -271,21 +229,17 @@ class _SubidosScreenState extends State<SubidosScreen> {
           }
 
           // Enviar PDF con folio ajustado
-          final sendResult = await subirPdfTarea(
-            item.pdfBytes,
-            folioAEnviar,
-            nombreCliente: item.nombreCliente,
-          );
-          if (sendResult.status != PdfSendStatus.uploaded) {
-            errores++;
-            continue;
+          if (item.tipo == 'Avance') {
+            await subirPdfAvances(item.pdfBytes, folioAEnviar, nombreCliente: item.nombreCliente);
+          } else {
+            await subirPdfTarea(item.pdfBytes, folioAEnviar, nombreCliente: item.nombreCliente);
           }
 
           // Actualizar folio de forma segura
           await FolioService.updateFolio(folioAEnviar);
 
           // Eliminar de la cola
-          await _queueService.removePdfFromQueue(item.folio);
+          await _queueService.removePdfFromQueue(item.folio, tipo: item.tipo);
           enviados++;
         } catch (e) {
           errores++;
@@ -328,9 +282,9 @@ class _SubidosScreenState extends State<SubidosScreen> {
     }
   }
 
-  Future<void> _deletePdf(int folio) async {
+  Future<void> _deletePdf(int folio, String tipo) async {
     try {
-      await _queueService.removePdfFromQueue(folio);
+      await _queueService.removePdfFromQueue(folio, tipo: tipo);
       _loadPendingPdfs();
       setState(() {});
 
@@ -471,7 +425,7 @@ class _SubidosScreenState extends State<SubidosScreen> {
                           ),
                         ),
                         title: Text(
-                          'Tarea ${item.folio}',
+                      '${item.tipo} ${item.folio}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Column(
@@ -511,7 +465,7 @@ class _SubidosScreenState extends State<SubidosScreen> {
                               onTap: () {
                                 Future.delayed(
                                   Duration.zero,
-                                  () => _showDeleteConfirmation(item.folio),
+                              () => _showDeleteConfirmation(item),
                                 );
                               },
                             ),
@@ -565,12 +519,12 @@ class _SubidosScreenState extends State<SubidosScreen> {
     );
   }
 
-  void _showDeleteConfirmation(int folio) {
+  void _showDeleteConfirmation(PdfQueueItem item) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar PDF'),
-        content: Text('¿Estás seguro de que deseas eliminar la tarea $folio?'),
+        content: Text('¿Estás seguro de que deseas eliminar ${item.tipo.toLowerCase()} ${item.folio}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -579,7 +533,7 @@ class _SubidosScreenState extends State<SubidosScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _deletePdf(folio);
+              _deletePdf(item.folio, item.tipo);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Eliminar'),
@@ -589,5 +543,3 @@ class _SubidosScreenState extends State<SubidosScreen> {
     );
   }
 }
-
-

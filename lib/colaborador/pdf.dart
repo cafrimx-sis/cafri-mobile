@@ -1,14 +1,19 @@
-// ignore_for_file: use_build_context_synchronously, unnecessary_nullable_for_final_variable_declarations
+﻿// ignore_for_file: use_build_context_synchronously, unnecessary_nullable_for_final_variable_declarations
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:cafri/helpers/local_pdf_storage.dart';
 import 'package:cafri/helpers/upload_pdf_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:signature/signature.dart';
 import 'package:pdf/pdf.dart' as ppdf;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'folio_service.dart';
 
 class MaterialRowData {
@@ -98,6 +103,7 @@ class HojaServicioData {
     descripcionInicioController.dispose();
     descripcionProcesoController.dispose();
     descripcionFinController.dispose();
+    descripcionVaptController.dispose();
     observacionesController.dispose(); // NUEVO
     areaController.dispose();
     for (final m in materiales) {
@@ -194,7 +200,8 @@ class FormularioPDF extends StatefulWidget {
   State<FormularioPDF> createState() => _FormularioPDFState();
 }
 
-class _FormularioPDFState extends State<FormularioPDF> {
+class _FormularioPDFState extends State<FormularioPDF>
+    with WidgetsBindingObserver {
   static const _colorSurface = Color(0xFFF3F6FB);
   static const _colorCard = Colors.white;
   static const _colorHeader = Color(0xFF0F4C81);
@@ -212,9 +219,24 @@ class _FormularioPDFState extends State<FormularioPDF> {
   int? folioActual;
   bool cargandoFolio = true;
 
+  static const String _draftKey = 'pdf_form_draft_v1';
+  static const int _maxFotosPorSeccion = 12;
+  static const int _jpegQuality = 75;
+
+  final Set<TextEditingController> _autosaveControllers = {};
+  Timer? _autosaveTimer;
+  bool _isRestoringDraft = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    _watchController(campoNombreCliente);
+    _watchController(responsableGlobal);
+    if (hojas.isNotEmpty) {
+      _watchHoja(hojas.first);
+    }
     _cargarFolio();
 
     // Prefill desde los parámetros del widget (si vienen)
@@ -226,16 +248,334 @@ class _FormularioPDFState extends State<FormularioPDF> {
     if (a != null && a.isNotEmpty && hojas.isNotEmpty) {
       hojas.first.areaController.text = a;
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeRestoreDraft();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autosaveTimer?.cancel();
     for (final hoja in hojas) {
       hoja.dispose();
     }
     campoNombreCliente.dispose();
     responsableGlobal.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _saveDraft();
+    }
+  }
+
+  void _watchController(TextEditingController controller) {
+    if (_autosaveControllers.add(controller)) {
+      controller.addListener(_scheduleAutosave);
+    }
+  }
+
+  void _watchMaterialRow(MaterialRowData row) {
+    _watchController(row.material);
+    _watchController(row.unidad);
+    _watchController(row.cantidad);
+    _watchController(row.observaciones);
+  }
+
+  void _watchHoja(HojaServicioData hoja) {
+    _watchController(hoja.descripcionTrabajoRealizadoController);
+    _watchController(hoja.observacionesController);
+    _watchController(hoja.areaController);
+    _watchController(hoja.descripcionVaptController);
+    _watchController(hoja.descripcionInicioController);
+    _watchController(hoja.descripcionProcesoController);
+    _watchController(hoja.descripcionFinController);
+    _watchController(hoja.nombreTecnicoDialogController);
+    _watchController(hoja.nombreRecibeDialogController);
+    for (final row in hoja.materiales) {
+      _watchMaterialRow(row);
+    }
+  }
+
+  void _scheduleAutosave() {
+    if (_isRestoringDraft) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 900), () {
+      _saveDraft();
+    });
+  }
+
+  Map<String, dynamic> _buildDraftMap() {
+    return {
+      'version': 1,
+      'savedAt': DateTime.now().toIso8601String(),
+      'folioActual': folioActual,
+      'cliente': campoNombreCliente.text,
+      'responsable': responsableGlobal.text,
+      'hojas': hojas.map((h) {
+        return {
+          'area': h.areaController.text,
+          'descripcionTrabajoRealizado':
+              h.descripcionTrabajoRealizadoController.text,
+          'observaciones': h.observacionesController.text,
+          'descripcionInicio': h.descripcionInicioController.text,
+          'descripcionProceso': h.descripcionProcesoController.text,
+          'descripcionFin': h.descripcionFinController.text,
+          'descripcionVapt': h.descripcionVaptController.text,
+          'materiales': h.materiales.map((m) => m.toMap()).toList(),
+          'sistemaHighWall': h.sistemaHighWall,
+          'sistemaPaquete': h.sistemaPaquete,
+          'sistemaFanCoil': h.sistemaFanCoil,
+          'sistemaCasets': h.sistemaCasets,
+          'sistemaCamaraFria': h.sistemaCamaraFria,
+          'sistemaPisoTecho': h.sistemaPisoTecho,
+          'sistemaManejadoraAire': h.sistemaManejadoraAire,
+          'sistemaPaquete2': h.sistemaPaquete2,
+          'tecnologiaStandar': h.tecnologiaStandar,
+          'tecnologiaInverter': h.tecnologiaInverter,
+          'tecnologiaVrfVrv': h.tecnologiaVrfVrv,
+          'tecnologiaAguaHelada': h.tecnologiaAguaHelada,
+        };
+      }).toList(),
+    };
+  }
+
+  bool _isFormBasicallyEmpty() {
+    if (campoNombreCliente.text.trim().isNotEmpty) return false;
+    if (responsableGlobal.text.trim().isNotEmpty) return false;
+    for (final h in hojas) {
+      if (h.areaController.text.trim().isNotEmpty) return false;
+      if (h.descripcionTrabajoRealizadoController.text.trim().isNotEmpty) {
+        return false;
+      }
+      if (h.observacionesController.text.trim().isNotEmpty) return false;
+      if (h.descripcionInicioController.text.trim().isNotEmpty) return false;
+      if (h.descripcionProcesoController.text.trim().isNotEmpty) return false;
+      if (h.descripcionFinController.text.trim().isNotEmpty) return false;
+      if (h.descripcionVaptController.text.trim().isNotEmpty) return false;
+      if (h.materiales.any((m) =>
+          m.material.text.trim().isNotEmpty ||
+          m.unidad.text.trim().isNotEmpty ||
+          m.cantidad.text.trim().isNotEmpty ||
+          m.observaciones.text.trim().isNotEmpty)) {
+        return false;
+      }
+      if (h.sistemaHighWall ||
+          h.sistemaPaquete ||
+          h.sistemaFanCoil ||
+          h.sistemaCasets ||
+          h.sistemaCamaraFria ||
+          h.sistemaPisoTecho ||
+          h.sistemaManejadoraAire ||
+          h.sistemaPaquete2 ||
+          h.tecnologiaStandar ||
+          h.tecnologiaInverter ||
+          h.tecnologiaVrfVrv ||
+          h.tecnologiaAguaHelada) {
+        return false;
+      }
+      if (h.fotosVapt.isNotEmpty ||
+          h.fotosMantenimientoInicio.isNotEmpty ||
+          h.fotosMantenimientoProceso.isNotEmpty ||
+          h.fotosMantenimientoFin.isNotEmpty ||
+          h.imagenesModeloSerieCapacidad.isNotEmpty ||
+          h.firmaTecnico != null ||
+          h.firmaRecibe != null) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_draftKey, jsonEncode(_buildDraftMap()));
+    } catch (_) {
+      // Silencioso: el autosave nunca debe tumbar la app
+    }
+  }
+
+  Future<Map<String, dynamic>?> _readDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey);
+      if (raw == null || raw.trim().isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return decoded.cast<String, dynamic>();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_draftKey);
+    } catch (_) {}
+  }
+
+  Future<void> _applyDraft(Map<String, dynamic> draft) async {
+    _isRestoringDraft = true;
+    try {
+      campoNombreCliente.text = (draft['cliente'] ?? '').toString();
+      responsableGlobal.text = (draft['responsable'] ?? '').toString();
+
+      final hojasDraft =
+          (draft['hojas'] is List) ? (draft['hojas'] as List) : <dynamic>[];
+
+      for (final hoja in hojas) {
+        hoja.dispose();
+      }
+      hojas.clear();
+
+      for (final h in hojasDraft) {
+        final hoja = HojaServicioData();
+        hojas.add(hoja);
+        _watchHoja(hoja);
+
+        if (h is Map) {
+          final map = h.cast<String, dynamic>();
+          hoja.areaController.text = (map['area'] ?? '').toString();
+          hoja.descripcionTrabajoRealizadoController.text =
+              (map['descripcionTrabajoRealizado'] ?? '').toString();
+          hoja.observacionesController.text =
+              (map['observaciones'] ?? '').toString();
+          hoja.descripcionInicioController.text =
+              (map['descripcionInicio'] ?? '').toString();
+          hoja.descripcionProcesoController.text =
+              (map['descripcionProceso'] ?? '').toString();
+          hoja.descripcionFinController.text =
+              (map['descripcionFin'] ?? '').toString();
+          hoja.descripcionVaptController.text =
+              (map['descripcionVapt'] ?? '').toString();
+
+          hoja.sistemaHighWall = map['sistemaHighWall'] == true;
+          hoja.sistemaPaquete = map['sistemaPaquete'] == true;
+          hoja.sistemaFanCoil = map['sistemaFanCoil'] == true;
+          hoja.sistemaCasets = map['sistemaCasets'] == true;
+          hoja.sistemaCamaraFria = map['sistemaCamaraFria'] == true;
+          hoja.sistemaPisoTecho = map['sistemaPisoTecho'] == true;
+          hoja.sistemaManejadoraAire = map['sistemaManejadoraAire'] == true;
+          hoja.sistemaPaquete2 = map['sistemaPaquete2'] == true;
+          hoja.tecnologiaStandar = map['tecnologiaStandar'] == true;
+          hoja.tecnologiaInverter = map['tecnologiaInverter'] == true;
+          hoja.tecnologiaVrfVrv = map['tecnologiaVrfVrv'] == true;
+          hoja.tecnologiaAguaHelada = map['tecnologiaAguaHelada'] == true;
+
+          for (final row in hoja.materiales) {
+            row.dispose();
+          }
+          hoja.materiales.clear();
+          final mats = (map['materiales'] is List)
+              ? (map['materiales'] as List)
+              : <dynamic>[];
+
+          if (mats.isEmpty) {
+            final row = MaterialRowData();
+            hoja.materiales.add(row);
+            _watchMaterialRow(row);
+          } else {
+            for (final m in mats) {
+              final row = MaterialRowData();
+              hoja.materiales.add(row);
+              _watchMaterialRow(row);
+              if (m is Map) {
+                final mm = m.cast<String, dynamic>();
+                row.material.text = (mm['material'] ?? '').toString();
+                row.unidad.text = (mm['unidad'] ?? '').toString();
+                row.cantidad.text = (mm['cantidad'] ?? '').toString();
+                row.observaciones.text = (mm['observaciones'] ?? '').toString();
+              }
+            }
+          }
+        }
+      }
+
+      if (hojas.isEmpty) {
+        final hoja = HojaServicioData();
+        hojas.add(hoja);
+        _watchHoja(hoja);
+      }
+    } finally {
+      _isRestoringDraft = false;
+    }
+
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _maybeRestoreDraft() async {
+    final draft = await _readDraft();
+    if (draft == null) return;
+    if (!mounted) return;
+
+    if (_isFormBasicallyEmpty()) {
+      await _applyDraft(draft);
+      return;
+    }
+
+    final savedAt = (draft['savedAt'] ?? '').toString();
+    final restore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Borrador detectado'),
+        content: Text(
+          savedAt.isNotEmpty
+              ? 'Hay un borrador guardado ($savedAt). ¿Deseas restaurarlo?'
+              : 'Hay un borrador guardado. ¿Deseas restaurarlo?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(false);
+              _clearDraft();
+            },
+            child: const Text('Descartar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+
+    if (restore == true) {
+      await _applyDraft(draft);
+    }
+  }
+
+  static Uint8List _downscaleJpeg(Uint8List bytes) {
+    try {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return bytes;
+      final maxSide =
+          decoded.width > decoded.height ? decoded.width : decoded.height;
+      if (maxSide <= 1280) {
+        return Uint8List.fromList(
+          img.encodeJpg(decoded, quality: _jpegQuality),
+        );
+      }
+      final ratio = 1280 / maxSide;
+      final newW = (decoded.width * ratio).round();
+      final newH = (decoded.height * ratio).round();
+      final resized = img.copyResize(decoded, width: newW, height: newH);
+      return Uint8List.fromList(img.encodeJpg(resized, quality: _jpegQuality));
+    } catch (_) {
+      return bytes;
+    }
   }
 
   String? validarCamposObligatorios() {
@@ -300,6 +640,10 @@ class _FormularioPDFState extends State<FormularioPDF> {
     hojas
       ..clear()
       ..add(HojaServicioData());
+    if (hojas.isNotEmpty) {
+      _watchHoja(hojas.first);
+    }
+    _clearDraft();
   }
 
   Future<void> _agregarHoja() async {
@@ -354,6 +698,8 @@ class _FormularioPDFState extends State<FormularioPDF> {
     setState(() {
       hojas.add(nueva);
     });
+    _watchHoja(nueva);
+    _scheduleAutosave();
   }
 
   Widget _hojasWidget() {
@@ -391,6 +737,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                               hoja.dispose();
                               hojas.removeAt(idx);
                             });
+                            _scheduleAutosave();
                           },
                         ),
                     ],
@@ -414,9 +761,14 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     icon: Icons.electrical_services_outlined,
                     fotos: hoja.fotosVapt,
                     descripcionController: hoja.descripcionVaptController,
-                    onAdd: (img) => setState(() => hoja.fotosVapt.add(img)),
-                    onRemove: (idx) =>
-                        setState(() => hoja.fotosVapt.removeAt(idx)),
+                    onAdd: (img) {
+                      setState(() => hoja.fotosVapt.add(img));
+                      _scheduleAutosave();
+                    },
+                    onRemove: (idx) {
+                      setState(() => hoja.fotosVapt.removeAt(idx));
+                      _scheduleAutosave();
+                    },
                   ),
                   const SizedBox(height: 8),
 
@@ -426,33 +778,42 @@ class _FormularioPDFState extends State<FormularioPDF> {
                     icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoInicio,
                     descripcionController: hoja.descripcionInicioController,
-                    onAdd: (img) =>
-                        setState(() => hoja.fotosMantenimientoInicio.add(img)),
-                    onRemove: (idx) => setState(
-                      () => hoja.fotosMantenimientoInicio.removeAt(idx),
-                    ),
+                    onAdd: (img) {
+                      setState(() => hoja.fotosMantenimientoInicio.add(img));
+                      _scheduleAutosave();
+                    },
+                    onRemove: (idx) {
+                      setState(() => hoja.fotosMantenimientoInicio.removeAt(idx));
+                      _scheduleAutosave();
+                    },
                   ),
                   FotosFilaDescripcion(
                     titulo: '6. Fotos de proceso',
                     icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoProceso,
                     descripcionController: hoja.descripcionProcesoController,
-                    onAdd: (img) =>
-                        setState(() => hoja.fotosMantenimientoProceso.add(img)),
-                    onRemove: (idx) => setState(
-                      () => hoja.fotosMantenimientoProceso.removeAt(idx),
-                    ),
+                    onAdd: (img) {
+                      setState(() => hoja.fotosMantenimientoProceso.add(img));
+                      _scheduleAutosave();
+                    },
+                    onRemove: (idx) {
+                      setState(() => hoja.fotosMantenimientoProceso.removeAt(idx));
+                      _scheduleAutosave();
+                    },
                   ),
                   FotosFilaDescripcion(
                     titulo: '7. Fotos de fin',
                     icon: Icons.photo_camera_outlined,
                     fotos: hoja.fotosMantenimientoFin,
                     descripcionController: hoja.descripcionFinController,
-                    onAdd: (img) =>
-                        setState(() => hoja.fotosMantenimientoFin.add(img)),
-                    onRemove: (idx) => setState(
-                      () => hoja.fotosMantenimientoFin.removeAt(idx),
-                    ),
+                    onAdd: (img) {
+                      setState(() => hoja.fotosMantenimientoFin.add(img));
+                      _scheduleAutosave();
+                    },
+                    onRemove: (idx) {
+                      setState(() => hoja.fotosMantenimientoFin.removeAt(idx));
+                      _scheduleAutosave();
+                    },
                   ),
                   _seccionFormulario(
                     titulo: '6. Descripción del trabajo',
@@ -567,6 +928,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                       setState(() {
                         hoja.imagenesModeloSerieCapacidad.remove(imgBytes);
                       });
+                      _scheduleAutosave();
                     },
                   ),
                 ],
@@ -574,19 +936,48 @@ class _FormularioPDFState extends State<FormularioPDF> {
             ),
             GestureDetector(
               onTap: () async {
-                final picker = ImagePicker();
-                final List<XFile>? pickedList = await picker.pickMultiImage(
-                  maxWidth: 1280,
-                  maxHeight: 1280,
-                  imageQuality: 75,
-                );
-                if (pickedList != null && pickedList.isNotEmpty) {
-                  final bytesList = await Future.wait(
-                    pickedList.map((xfile) => xfile.readAsBytes()),
+                try {
+                  final picker = ImagePicker();
+                  final List<XFile>? pickedList = await picker.pickMultiImage(
+                    maxWidth: 1280,
+                    maxHeight: 1280,
+                    imageQuality: _jpegQuality,
                   );
+                  if (!mounted) return;
+                  if (pickedList == null || pickedList.isEmpty) return;
+
+                  final cupo = _maxFotosPorSeccion - hoja.imagenesModeloSerieCapacidad.length;
+                  if (cupo <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Límite: $_maxFotosPorSeccion fotos en esta sección.'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                    return;
+                  }
+
+                  final toRead = pickedList.take(cupo);
+                  final List<Uint8List> bytesList = [];
+                  for (final xfile in toRead) {
+                    final bytes = await xfile.readAsBytes();
+                    bytesList.add(_downscaleJpeg(bytes));
+                  }
+
+                  if (!mounted) return;
                   setState(() {
                     hoja.imagenesModeloSerieCapacidad.addAll(bytesList);
                   });
+                  _scheduleAutosave();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('No se pudo agregar la(s) foto(s): $e'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
                 }
               },
               child: Container(
@@ -640,42 +1031,66 @@ class _FormularioPDFState extends State<FormularioPDF> {
             checkboxItem(
               'High Wall',
               hoja.sistemaHighWall,
-              (v) => setState(() => hoja.sistemaHighWall = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaHighWall = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Paquete',
               hoja.sistemaPaquete,
-              (v) => setState(() => hoja.sistemaPaquete = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaPaquete = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Fan & Coil',
               hoja.sistemaFanCoil,
-              (v) => setState(() => hoja.sistemaFanCoil = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaFanCoil = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Casets',
               hoja.sistemaCasets,
-              (v) => setState(() => hoja.sistemaCasets = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaCasets = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Cámara fría',
               hoja.sistemaCamaraFria,
-              (v) => setState(() => hoja.sistemaCamaraFria = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaCamaraFria = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Piso-Techo',
               hoja.sistemaPisoTecho,
-              (v) => setState(() => hoja.sistemaPisoTecho = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaPisoTecho = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Manejadora de Aire',
               hoja.sistemaManejadoraAire,
-              (v) => setState(() => hoja.sistemaManejadoraAire = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaManejadoraAire = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Paquete',
               hoja.sistemaPaquete2,
-              (v) => setState(() => hoja.sistemaPaquete2 = v ?? false),
+              (v) {
+                setState(() => hoja.sistemaPaquete2 = v ?? false);
+                _scheduleAutosave();
+              },
             ),
           ],
         ),
@@ -692,22 +1107,34 @@ class _FormularioPDFState extends State<FormularioPDF> {
             checkboxItem(
               'Standar',
               hoja.tecnologiaStandar,
-              (v) => setState(() => hoja.tecnologiaStandar = v ?? false),
+              (v) {
+                setState(() => hoja.tecnologiaStandar = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Inverter',
               hoja.tecnologiaInverter,
-              (v) => setState(() => hoja.tecnologiaInverter = v ?? false),
+              (v) {
+                setState(() => hoja.tecnologiaInverter = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'VRF/VRV',
               hoja.tecnologiaVrfVrv,
-              (v) => setState(() => hoja.tecnologiaVrfVrv = v ?? false),
+              (v) {
+                setState(() => hoja.tecnologiaVrfVrv = v ?? false);
+                _scheduleAutosave();
+              },
             ),
             checkboxItem(
               'Agua Helada',
               hoja.tecnologiaAguaHelada,
-              (v) => setState(() => hoja.tecnologiaAguaHelada = v ?? false),
+              (v) {
+                setState(() => hoja.tecnologiaAguaHelada = v ?? false);
+                _scheduleAutosave();
+              },
             ),
           ],
         ),
@@ -833,6 +1260,7 @@ class _FormularioPDFState extends State<FormularioPDF> {
                                     row.dispose();
                                   }
                                 });
+                                _scheduleAutosave();
                               },
                             ),
                           ],
@@ -846,8 +1274,12 @@ class _FormularioPDFState extends State<FormularioPDF> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: () =>
-                    setState(() => hoja.materiales.add(MaterialRowData())),
+                onPressed: () {
+                  final row = MaterialRowData();
+                  _watchMaterialRow(row);
+                  setState(() => hoja.materiales.add(row));
+                  _scheduleAutosave();
+                },
                 icon: const Icon(Icons.add_circle_outline),
                 label: const Text('Agregar material'),
               ),
@@ -1415,6 +1847,17 @@ class _FormularioPDFState extends State<FormularioPDF> {
                             throw Exception('El PDF generado está vací­o');
                           }
 
+                          String? localPdfPath;
+                          String? localPdfError;
+                          try {
+                            localPdfPath = await guardarCopiaPdfEnTelefono(
+                              pdfBytes: pdfBytes,
+                              fileName: 'Tarea_$folioParaPDF.pdf',
+                            );
+                          } catch (e) {
+                            localPdfError = e.toString();
+                          }
+
                           try {
                             await subirPdfTarea(
                               pdfBytes,
@@ -1433,9 +1876,13 @@ class _FormularioPDFState extends State<FormularioPDF> {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(errorMsg),
+                                content: Text(
+                                  localPdfPath != null
+                                      ? '$errorMsg\nCopia local: $localPdfPath'
+                                      : '$errorMsg\nNo se pudo guardar copia local: $localPdfError',
+                                ),
                                 backgroundColor: Colors.orange,
-                                duration: const Duration(seconds: 4),
+                                duration: const Duration(seconds: 6),
                               ),
                             );
                             return;
@@ -1454,10 +1901,12 @@ class _FormularioPDFState extends State<FormularioPDF> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '✓ PDF enviado exitosamente\nFolio: $folioParaPDF',
+                                localPdfPath != null
+                                    ? '✓ PDF enviado exitosamente\nFolio: $folioParaPDF\nCopia local: $localPdfPath'
+                                    : '✓ PDF enviado exitosamente\nFolio: $folioParaPDF\nNo se pudo guardar copia local: $localPdfError',
                               ),
                               backgroundColor: Colors.green,
-                              duration: const Duration(seconds: 3),
+                              duration: const Duration(seconds: 6),
                             ),
                           );
 
@@ -1528,20 +1977,47 @@ class _FotosFilaDescripcionState extends State<FotosFilaDescripcion> {
   static const _titleBg = Color(0xFF0F4C81);
 
   Future<void> _agregarFoto() async {
-    final picker = ImagePicker();
-    final List<XFile>? pickedList = await picker.pickMultiImage(
-      maxWidth: 1280,
-      maxHeight: 1280,
-      imageQuality: 75,
-    );
-    if (pickedList != null && pickedList.isNotEmpty) {
-      final bytesList = await Future.wait(
-        pickedList.map((xfile) => xfile.readAsBytes()),
+    try {
+      final picker = ImagePicker();
+      final List<XFile>? pickedList = await picker.pickMultiImage(
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: _FormularioPDFState._jpegQuality,
       );
-      for (final bytes in bytesList) {
-        widget.onAdd(bytes);
+      if (!mounted) return;
+      if (pickedList == null || pickedList.isEmpty) return;
+
+      final cupo =
+          _FormularioPDFState._maxFotosPorSeccion - widget.fotos.length;
+      if (cupo <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Límite: ${_FormularioPDFState._maxFotosPorSeccion} fotos en esta sección.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        return;
       }
+
+      final toRead = pickedList.take(cupo);
+      for (final xfile in toRead) {
+        final bytes = await xfile.readAsBytes();
+        widget.onAdd(_FormularioPDFState._downscaleJpeg(bytes));
+      }
+
+      if (!mounted) return;
       setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo agregar la(s) foto(s): $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
